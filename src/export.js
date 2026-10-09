@@ -55,20 +55,44 @@ export function buildExportSVG(renderer, { pad = 40, background = null } = {}) {
   return new XMLSerializer().serializeToString(svg);
 }
 
-export function downloadBlob(filename, blob) {
+let _downloadsNs; // namespace ของ Artifact (claude.ai) ถ้าหน้านี้ถูกเปิดในนั้น
+async function hostDownloads() {
+  if (_downloadsNs !== undefined) return _downloadsNs;
+  try { _downloadsNs = (typeof window !== 'undefined' && window.claude?.use) ? await window.claude.use('downloads') : null; }
+  catch { _downloadsNs = null; }
+  return _downloadsNs;
+}
+
+/**
+ * ดาวน์โหลดไฟล์: ถ้าเปิดอยู่ในหน้า Artifact ของ claude.ai ใช้ช่องทางบันทึกของมัน (ผู้ใช้กดยืนยัน)
+ * ไม่เช่นนั้นใช้ลิงก์ดาวน์โหลดของเบราว์เซอร์ตามปกติ
+ * คืน 'saved' | 'declined' | 'browser'
+ */
+export async function downloadBlob(filename, blob) {
+  const dl = await hostDownloads();
+  if (dl) {
+    try { await dl.save({ filename, data: blob }); return 'saved'; }
+    catch (err) {
+      if (err?.code === 'declined') return 'declined';
+      if (err?.code === 'rate_limited') throw new Error('มีกล่องบันทึกไฟล์ค้างอยู่ รอสักครู่แล้วลองใหม่');
+      if (err?.code === 'too_large') throw new Error('ไฟล์ใหญ่เกินไปสำหรับช่องทางนี้');
+      // โค้ดอื่น ๆ → ลองวิธีเบราว์เซอร์ธรรมดา
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return 'browser';
 }
 
 export function downloadText(filename, text, type = 'text/plain;charset=utf-8') {
-  downloadBlob(filename, new Blob([text], { type }));
+  return downloadBlob(filename, new Blob([text], { type }));
 }
 
 export function exportSVG(renderer, filename) {
-  downloadText(filename, buildExportSVG(renderer), 'image/svg+xml;charset=utf-8');
+  return downloadText(filename, buildExportSVG(renderer), 'image/svg+xml;charset=utf-8');
 }
 
 /** เรนเดอร์ผังเป็น canvas (ใช้ร่วมกันสำหรับ PNG/JPEG/PDF) */
@@ -103,7 +127,7 @@ function canvasToBlob(canvas, type, quality) {
 export async function exportImage(renderer, filename, { format = 'png', scale = 2, quality = 0.92 } = {}) {
   const canvas = await renderToCanvas(renderer, { scale });
   const blob = await canvasToBlob(canvas, format === 'jpeg' ? 'image/jpeg' : 'image/png', quality);
-  downloadBlob(filename, blob);
+  return downloadBlob(filename, blob);
 }
 export function exportPNG(renderer, filename, opts = {}) { return exportImage(renderer, filename, { ...opts, format: 'png' }); }
 
@@ -114,7 +138,7 @@ export async function exportPDF(renderer, filename, { page = 'fit', scale = 2, t
   const jpeg = new Uint8Array(await blob.arrayBuffer());
   const size = PAGE_SIZES[page] || null;
   const pdf = buildImagePDF(jpeg, canvas.width, canvas.height, size ? { title, pageWidth: size.w, pageHeight: size.h } : { title });
-  downloadBlob(filename, new Blob([pdf], { type: 'application/pdf' }));
+  return downloadBlob(filename, new Blob([pdf], { type: 'application/pdf' }));
 }
 
 export function safeFilename(name, ext) {

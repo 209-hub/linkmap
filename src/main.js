@@ -90,6 +90,18 @@ app.toast = (msg, isError = false) => {
   const t = $('#toast'); t.textContent = msg; t.classList.toggle('error', isError); t.classList.remove('hidden');
   clearTimeout(app._toastTimer); app._toastTimer = setTimeout(() => t.classList.add('hidden'), isError ? 5000 : 3000);
 };
+/** กล่องยืนยันของแอปเอง (window.confirm ถูกบล็อกในหน้า Artifact/iframe) */
+app.confirm = (message, { ok = 'ตกลง', cancel = 'ยกเลิก' } = {}) => new Promise((resolve) => {
+  const dlg = $('#dlg-confirm');
+  dlg.querySelector('#confirm-msg').textContent = message;
+  const okBtn = dlg.querySelector('#confirm-ok'), cBtn = dlg.querySelector('#confirm-cancel');
+  okBtn.textContent = ok; cBtn.textContent = cancel;
+  const done = (v) => { dlg.close(); resolve(v); };
+  okBtn.onclick = () => done(true); cBtn.onclick = () => done(false);
+  dlg.oncancel = (e) => { e.preventDefault(); done(false); };
+  dlg.showModal(); okBtn.focus();
+});
+const saved = (r, what) => { if (r === 'declined') app.toast('ยกเลิกการบันทึก'); else app.toast(`${what}แล้ว${r === 'browser' ? ' (ดูในโฟลเดอร์ดาวน์โหลด)' : ''}`); };
 app.setTool = (tool) => {
   app.tool = tool;
   document.querySelectorAll('#toolbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
@@ -601,23 +613,23 @@ app.run = async (cmd) => {
   }
   switch (cmd) {
     case 'new':
-      if (app.graph.nodes.size && !confirm('เริ่มผังใหม่? (งานปัจจุบันบันทึกอัตโนมัติไว้ในเบราว์เซอร์แล้ว แต่จะถูกแทนที่)')) return;
+      if (app.graph.nodes.size && !(await app.confirm('เริ่มผังใหม่? ผังปัจจุบันจะถูกแทนที่ (ถ้ายังไม่ได้บันทึกเป็นไฟล์ JSON ให้กดยกเลิกแล้ว Ctrl+S ก่อน)', { ok: 'เริ่มผังใหม่' }))) return;
       loadGraph(new Graph()); app.toast('เริ่มผังใหม่'); break;
     case 'open': $('#file-json').value = ''; $('#file-json').click(); break;
     case 'save': {
       const json = JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] }, null, 2);
-      downloadText(safeFilename(app.graph.meta.title, 'linkmap.json'), json, 'application/json');
-      app.toast('บันทึกไฟล์ JSON แล้ว (ดูในโฟลเดอร์ดาวน์โหลด)'); break;
+      try { saved(await downloadText(safeFilename(app.graph.meta.title, 'linkmap.json'), json, 'application/json'), 'บันทึกไฟล์ JSON'); } catch (err) { app.toast(err.message, true); }
+      break;
     }
     case 'import-csv': openCsvDialog(app); break;
-    case 'export-nodes-csv': downloadText(safeFilename(app.graph.meta.title + '_nodes', 'csv'), exportNodesCSV(app.graph), 'text/csv;charset=utf-8'); break;
-    case 'export-links-csv': downloadText(safeFilename(app.graph.meta.title + '_links', 'csv'), exportLinksCSV(app.graph), 'text/csv;charset=utf-8'); break;
+    case 'export-nodes-csv': try { saved(await downloadText(safeFilename(app.graph.meta.title + '_nodes', 'csv'), exportNodesCSV(app.graph), 'text/csv;charset=utf-8'), 'ส่งออก CSV'); } catch (err) { app.toast(err.message, true); } break;
+    case 'export-links-csv': try { saved(await downloadText(safeFilename(app.graph.meta.title + '_links', 'csv'), exportLinksCSV(app.graph), 'text/csv;charset=utf-8'), 'ส่งออก CSV'); } catch (err) { app.toast(err.message, true); } break;
     case 'export-png':
-      try { await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'png'), { format: 'png' }); app.toast('ส่งออก PNG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
+      try { saved(await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'png'), { format: 'png' }), 'ส่งออก PNG'); } catch (err) { app.toast(err.message, true); } break;
     case 'export-svg':
-      try { exportSVG(app.renderer, safeFilename(app.graph.meta.title, 'svg')); app.toast('ส่งออก SVG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
+      try { saved(await exportSVG(app.renderer, safeFilename(app.graph.meta.title, 'svg')), 'ส่งออก SVG'); } catch (err) { app.toast(err.message, true); } break;
     case 'load-sample':
-      if (app.graph.nodes.size && !confirm('โหลดเครือข่ายตัวอย่างแทนผังปัจจุบัน?')) return;
+      if (app.graph.nodes.size && !(await app.confirm('โหลดตัวอย่างแทนผังปัจจุบัน?', { ok: 'โหลดตัวอย่าง' }))) return;
       loadSample(); break;
     case 'undo': { const g = app.history.undo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
     case 'redo': { const g = app.history.redo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
@@ -647,12 +659,11 @@ app.run = async (cmd) => {
     case 'image-add': $('#file-image').click(); break;
     case 'image-remove': app.removeImage(); break;
     case 'export-jpeg':
-      try { await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'jpg'), { format: 'jpeg' }); app.toast('ส่งออก JPEG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
+      try { saved(await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'jpg'), { format: 'jpeg' }), 'ส่งออก JPEG'); } catch (err) { app.toast(err.message, true); } break;
     case 'export-pdf': case 'export-pdf-a4': case 'export-pdf-a3':
       try {
         const page = cmd === 'export-pdf-a4' ? 'a4landscape' : cmd === 'export-pdf-a3' ? 'a3landscape' : 'fit';
-        await exportPDF(app.renderer, safeFilename(app.graph.meta.title, 'pdf'), { page, title: app.graph.meta.title });
-        app.toast('ส่งออก PDF แล้ว');
+        saved(await exportPDF(app.renderer, safeFilename(app.graph.meta.title, 'pdf'), { page, title: app.graph.meta.title }), 'ส่งออก PDF');
       } catch (err) { app.toast(err.message, true); } break;
     case 'toggle-collapse': { const id = selNodes()[0]; if (id) app.toggleCollapse(id); break; }
     case 'expand-all': app.mutate(g => { for (const n of g.nodes.values()) if (n.collapsed) g.updateNode(n.id, { collapsed: false }); }); if (app.opts.autoArrange) app.arrangeMindmap(); break;
@@ -661,10 +672,10 @@ app.run = async (cmd) => {
     case 'move-up': { const id = selNodes()[0]; if (id) app.moveSibling(id, -1); break; }
     case 'move-down': { const id = selNodes()[0]; if (id) app.moveSibling(id, 1); break; }
     case 'go-root': { const r = app.tree.roots[0]; if (r) { app.select([r]); app.renderer.centerOn(r); } break; }
-    case 'export-outline': downloadText(safeFilename(app.graph.meta.title, 'md'), toOutline(app.graph), 'text/markdown;charset=utf-8'); app.toast('ส่งออกโครงร่าง Markdown แล้ว'); break;
+    case 'export-outline': try { saved(await downloadText(safeFilename(app.graph.meta.title, 'md'), toOutline(app.graph), 'text/markdown;charset=utf-8'), 'ส่งออกโครงร่าง Markdown'); } catch (err) { app.toast(err.message, true); } break;
     case 'copy-outline': {
       const md = toOutline(app.graph);
-      try { await navigator.clipboard.writeText(md); app.toast('คัดลอกโครงร่างไปคลิปบอร์ดแล้ว'); } catch { downloadText(safeFilename(app.graph.meta.title, 'md'), md, 'text/markdown;charset=utf-8'); }
+      try { await navigator.clipboard.writeText(md); app.toast('คัดลอกโครงร่างไปคลิปบอร์ดแล้ว'); } catch { try { saved(await downloadText(safeFilename(app.graph.meta.title, 'md'), md, 'text/markdown;charset=utf-8'), 'บันทึกโครงร่าง'); } catch (err) { app.toast(err.message, true); } }
       break;
     }
     case 'import-outline': openOutlineDialog(app); break;
