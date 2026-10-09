@@ -1,0 +1,12 @@
+{
+  "name": "linkmap",
+  "version": "0.1.0",
+  "description": "LinkMap — ไวท์บอร์ดมายแมป + วิเคราะห์ความเชื่อมโยง (local-first, ไม่มี dependency ภายนอก)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python serve.py",
+    "test": "node --test tests/"
+  },
+  "license": "UNLICENSED"
+}
