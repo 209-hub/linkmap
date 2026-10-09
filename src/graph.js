@@ -170,6 +170,12 @@ export class History {
     if (this.past.length > this.limit) this.past.shift();
     this.future.length = 0;
   }
+  /** บันทึก snapshot ที่ถ่ายไว้ก่อนหน้า (ใช้กับการลากที่แก้กราฟตรง ๆ) */
+  pushSnapshot(snap) {
+    this.past.push(snap);
+    if (this.past.length > this.limit) this.past.shift();
+    this.future.length = 0;
+  }
   canUndo() { return this.past.length > 0; }
   canRedo() { return this.future.length > 0; }
   undo(current) {

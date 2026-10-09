@@ -29,7 +29,8 @@ test('toJSON/fromJSON ไปกลับได้ครบ', () => {
   const g2 = Graph.fromJSON(json);
   assert.equal(g2.size.nodes, g.size.nodes);
   assert.equal(g2.size.links, g.size.links);
-  assert.equal(g2.getNode('p1').attrs['บทบาท'], 'หัวหน้ากลุ่ม');
+  assert.equal(g2.getNode('t1').label, g.getNode('t1').label);
+  assert.equal(g2.getNode('t1').type, 'topic');
   assert.equal(g2.meta.title, g.meta.title);
 });
 
@@ -40,11 +41,13 @@ test('fromJSON ปฏิเสธรูปแบบผิด', () => {
 
 test('adjacency ไม่รวมโน้ต/กรอบ และรวมน้ำหนักเส้นซ้ำ', () => {
   const g = sampleGraph();
+  g.addLink({ from: 't1', to: 't2', weight: 2 });
+  g.addLink({ from: 't2', to: 't1', weight: 1 });
   const adj = g.adjacency();
   assert.ok(!adj.has('note1'));
-  // p1→p3 มี 2 เส้น (2+1) และ p3→p1 อีก 1 เส้น
-  assert.equal(adj.get('p1').get('p3'), 4);
-  assert.equal(adj.get('p3').get('p1'), 4);
+  // t1→t2 มีอยู่แล้ว (1) + 2 + สวนทาง 1 = 4
+  assert.equal(adj.get('t1').get('t2'), 4);
+  assert.equal(adj.get('t2').get('t1'), 4);
 });
 
 test('findNodeByLabel ไม่สนตัวพิมพ์/ช่องว่าง', () => {

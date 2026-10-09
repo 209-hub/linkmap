@@ -320,6 +320,95 @@ export function timelineLayout(nodes, links, opts = {}) {
   return recenter(pos, nodes);
 }
 
+
+// ---------------------------------------------------------------- mindmap (ซ้าย-ขวา รอบราก)
+/** หาต้นไม้จากราก: ใช้ทิศทางเส้น (from→to) เป็นพ่อ→ลูก ถ้าไม่ถึงให้ใช้แบบไม่มีทิศทาง */
+export function buildTree(nodes, links, rootId = null) {
+  const ids = nodes.map(n => n.id);
+  const idSet = new Set(ids);
+  const out = new Map(ids.map(id => [id, []]));
+  const und = new Map(ids.map(id => [id, []]));
+  const indeg = new Map(ids.map(id => [id, 0]));
+  for (const l of links) {
+    if (!idSet.has(l.from) || !idSet.has(l.to) || l.from === l.to) continue;
+    out.get(l.from).push(l.to); indeg.set(l.to, indeg.get(l.to) + 1);
+    und.get(l.from).push(l.to); und.get(l.to).push(l.from);
+  }
+  const children = new Map(ids.map(id => [id, []]));
+  const parent = new Map();
+  const visited = new Set();
+  const roots = [];
+  const grow = (root) => {
+    roots.push(root); visited.add(root);
+    const queue = [root];
+    while (queue.length) {
+      const u = queue.shift();
+      for (const v of [...out.get(u), ...und.get(u)]) {
+        if (visited.has(v)) continue;
+        visited.add(v); parent.set(v, u); children.get(u).push(v); queue.push(v);
+      }
+    }
+  };
+  if (rootId && idSet.has(rootId)) grow(rootId);
+  // รากถัดไป: โหนดที่ยังไม่ถูกเยี่ยม เลือกตัวที่ไม่มีเส้นเข้าและมีเส้นออกมากสุด
+  const order = [...ids].sort((a, b) => indeg.get(a) - indeg.get(b) || out.get(b).length - out.get(a).length || und.get(b).length - und.get(a).length);
+  for (const id of order) if (!visited.has(id)) grow(id);
+  return { roots, children, parent };
+}
+
+export function mindmapLayout(nodes, links, opts = {}) {
+  const { rootId = null, hGap = 190, vGap = 46, sizeFn = null } = opts;
+  const pos = new Map();
+  if (!nodes.length) return pos;
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const { roots, children } = buildTree(nodes, links, rootId);
+  const height = (id) => { // ความสูงรวมของซับทรี (หน่วย: โหนด)
+    const ch = children.get(id);
+    if (!ch.length) return 1;
+    return ch.reduce((s, c) => s + height(c), 0);
+  };
+  const nodeW = (id) => (sizeFn ? sizeFn(byId.get(id)).w : 120);
+  // วางซับทรีไปทางด้านหนึ่ง (dir = +1 ขวา, -1 ซ้าย) โดย y เป็นกึ่งกลางของช่วง
+  const place = (id, x, yTop, dir, depth) => {
+    const h = height(id) * vGap;
+    const yCenter = yTop + h / 2;
+    pos.set(id, { x, y: yCenter });
+    let cy = yTop;
+    for (const c of children.get(id)) {
+      const ch = height(c) * vGap;
+      const cx = x + dir * (nodeW(id) / 2 + hGap * 0.55 + nodeW(c) / 2);
+      place(c, cx, cy, dir, depth + 1);
+      cy += ch;
+    }
+  };
+  let yCursor = 0;
+  for (const root of roots) {
+    const ch = children.get(root);
+    // แบ่งลูกชั้นแรกเป็นซ้าย/ขวาให้สมดุลตามความสูงของซับทรี
+    const right = [], left = [];
+    let hr = 0, hl = 0;
+    for (const c of ch) {
+      const h = height(c);
+      if (hr <= hl) { right.push(c); hr += h; } else { left.push(c); hl += h; }
+    }
+    const total = Math.max(1, hr, hl) * vGap;
+    const rootY = yCursor + total / 2;
+    pos.set(root, { x: 0, y: rootY });
+    const side = (arr, dir, hsum) => {
+      let cy = rootY - (hsum * vGap) / 2;
+      for (const c of arr) {
+        const h = height(c) * vGap;
+        const cx = dir * (nodeW(root) / 2 + hGap * 0.6 + nodeW(c) / 2);
+        place(c, cx, cy, dir, 1);
+        cy += h;
+      }
+    };
+    side(right, 1, hr); side(left, -1, hl);
+    yCursor += total + vGap * 1.5;
+  }
+  return recenter(pos, nodes);
+}
+
 // ---------------------------------------------------------------- grid (ตัวช่วย)
 export function gridLayout(nodes, links, opts = {}) {
   const { spacing = NODE_SPACING } = opts;
@@ -330,6 +419,7 @@ export function gridLayout(nodes, links, opts = {}) {
 }
 
 export const LAYOUTS = {
+  mindmap: { name: 'มายแมป (ซ้าย-ขวา)', fn: mindmapLayout },
   force: { name: 'กระจายแรง (force)', fn: forceLayout },
   hierarchical: { name: 'ลำดับชั้น (hierarchical)', fn: hierarchicalLayout },
   circular: { name: 'วงกลม (circular)', fn: circularLayout },

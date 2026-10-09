@@ -1,5 +1,6 @@
 // ประเภทเอนทิตี สี และไอคอน (ไม่มี dependency ภายนอก)
 export const ENTITY_TYPES = {
+  topic:   { label: 'หัวข้อ',    color: '#334155', icon: '' },
   person:  { label: 'บุคคล',     color: '#2563eb', icon: '👤' },
   org:     { label: 'องค์กร',    color: '#7c3aed', icon: '🏢' },
   place:   { label: 'สถานที่',   color: '#059669', icon: '📍' },
@@ -12,7 +13,7 @@ export const ENTITY_TYPES = {
   group:   { label: 'กรอบกลุ่ม', color: '#94a3b8', icon: '▢' },
 };
 
-export const TYPE_ORDER = ['person', 'org', 'place', 'event', 'phone', 'account', 'vehicle', 'generic'];
+export const TYPE_ORDER = ['topic', 'person', 'org', 'place', 'event', 'phone', 'account', 'vehicle', 'generic'];
 
 export function typeInfo(type) {
   return ENTITY_TYPES[type] || ENTITY_TYPES.generic;

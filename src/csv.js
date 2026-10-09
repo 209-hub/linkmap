@@ -113,7 +113,7 @@ export function detectKind(headers) {
  * mode: 'auto' | 'nodes' | 'links' (รายการเส้น from,to,label — สร้างโหนดอัตโนมัติถ้าไม่พบ)
  * คืน {nodesAdded, linksAdded, nodesUpdated, warnings}
  */
-export function importCSV(graph, text, { mode = 'auto', delimiter = null, matchBy = 'label' } = {}) {
+export function importCSV(graph, text, { mode = 'auto', delimiter = null, matchBy = 'label', defaultType = 'generic' } = {}) {
   const rows = parseCSV(text, delimiter);
   const { headers, records } = rowsToObjects(rows);
   const result = { nodesAdded: 0, linksAdded: 0, nodesUpdated: 0, warnings: [], kind: null };
@@ -140,7 +140,7 @@ export function importCSV(graph, text, { mode = 'auto', delimiter = null, matchB
       for (const h of extra) if (r[h] !== '') attrs[h] = r[h];
       const patch = {
         label: label || r[cId],
-        type: cType ? normalizeType(r[cType]) : 'generic',
+        type: cType && r[cType] ? normalizeType(r[cType]) : defaultType,
         date: cDate ? r[cDate] : '', source: cSource ? r[cSource] : '',
         color: cColor && r[cColor] ? r[cColor] : null,
         notes: cNotes ? r[cNotes] : '',
@@ -169,7 +169,7 @@ export function importCSV(graph, text, { mode = 'auto', delimiter = null, matchB
     if (!key) return null;
     let n = graph.getNode(key) || graph.findNodeByLabel(key);
     if (!n) {
-      n = graph.addNode({ label: key, type: typeHint ? normalizeType(typeHint) : 'generic', x: 0, y: 0 });
+      n = graph.addNode({ label: key, type: typeHint ? normalizeType(typeHint) : defaultType, x: 0, y: 0 });
       result.nodesAdded++;
     } else if (typeHint && n.type === 'generic') {
       const t = normalizeType(typeHint);

@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "linkmap", "runtimeExecutable": "python", "runtimeArgs": ["serve.py", "8781"], "port": 8781 }
+  ]
+}

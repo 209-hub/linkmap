@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { forceLayout, hierarchicalLayout, circularLayout, groupedLayout, timelineLayout, parseDate, runLayout, LAYOUTS } from '../src/layout.js';
+import { mindmapLayout, buildTree, forceLayout, hierarchicalLayout, circularLayout, groupedLayout, timelineLayout, parseDate, runLayout, LAYOUTS } from '../src/layout.js';
 import { sampleGraph } from '../src/sample.js';
 
 function data() {
@@ -134,4 +134,28 @@ test('เลย์เอาต์คงจุดศูนย์กลางเ�
   const pts = [...pos.values()];
   const cx = (Math.min(...pts.map(p => p.x)) + Math.max(...pts.map(p => p.x))) / 2;
   assert.ok(Math.abs(cx - 1100) < 2, `ศูนย์กลาง x=${cx}`);
+});
+
+test('mindmap: รากอยู่กลาง ลูกแบ่งซ้าย/ขวา หลานอยู่ถัดออกไปด้านเดียวกับพ่อ', () => {
+  const nodes = ['root', 'a', 'b', 'c', 'a1', 'a2', 'b1'].map(id => ({ id, x: 0, y: 0, label: id }));
+  const links = [['root', 'a'], ['root', 'b'], ['root', 'c'], ['a', 'a1'], ['a', 'a2'], ['b', 'b1']].map(([from, to]) => ({ from, to }));
+  const pos = mindmapLayout(nodes, links, { rootId: 'root' });
+  const r = pos.get('root');
+  const sides = ['a', 'b', 'c'].map(id => Math.sign(pos.get(id).x - r.x));
+  assert.ok(sides.includes(1) && sides.includes(-1), 'ต้องมีทั้งซ้ายและขวา');
+  const sa = Math.sign(pos.get('a').x - r.x);
+  assert.equal(Math.sign(pos.get('a1').x - r.x), sa);
+  assert.ok(Math.abs(pos.get('a1').x - r.x) > Math.abs(pos.get('a').x - r.x), 'หลานไกลกว่าลูก');
+  assert.notEqual(pos.get('a1').y, pos.get('a2').y, 'พี่น้องไม่ทับกัน');
+});
+
+test('buildTree: เลือกรากอัตโนมัติ (ไม่มีเส้นเข้า) และรองรับหลายต้น', () => {
+  const nodes = ['r', 'x', 'y', 'q'].map(id => ({ id, x: 0, y: 0 }));
+  const links = [{ from: 'r', to: 'x' }, { from: 'x', to: 'y' }];
+  const t = buildTree(nodes, links);
+  assert.equal(t.roots[0], 'r');
+  assert.deepEqual(t.children.get('r'), ['x']);
+  assert.ok(t.roots.includes('q'));
+  const pos = mindmapLayout(nodes, links);
+  assert.equal(pos.size, 4);
 });

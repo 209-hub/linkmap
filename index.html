@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkMap — มายแมปจดเรียน จัดผังอัตโนมัติ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232563eb'/%3E%3Ccircle cx='24' cy='12' r='5' fill='%237c3aed'/%3E%3Ccircle cx='14' cy='25' r='5' fill='%23059669'/%3E%3Cpath d='M8 8L24 12L14 25Z' fill='none' stroke='%2394a3b8' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- แถบบน -->
+  <header id="topbar">
+    <div class="brand" title="LinkMap">
+      <svg width="22" height="22" viewBox="0 0 32 32"><circle cx="8" cy="8" r="5" fill="#2563eb"/><circle cx="24" cy="12" r="5" fill="#7c3aed"/><circle cx="14" cy="25" r="5" fill="#059669"/><path d="M8 8L24 12L14 25Z" fill="none" stroke="#94a3b8" stroke-width="2"/></svg>
+      <span>LinkMap</span>
+    </div>
+    <input id="doc-title" class="doc-title" value="ผังใหม่" spellcheck="false" title="ชื่อผัง (คลิกเพื่อแก้)">
+    <nav class="menubar" id="menubar">
+      <div class="menu" data-menu="file"><button class="menu-btn">ไฟล์</button>
+        <div class="menu-list">
+          <button data-cmd="new">ผังใหม่</button>
+          <button data-cmd="open">เปิดไฟล์ JSON… <kbd>Ctrl+O</kbd></button>
+          <button data-cmd="save">บันทึก JSON <kbd>Ctrl+S</kbd></button>
+          <hr>
+          <button data-cmd="import-csv">นำเข้า CSV…</button>
+          <button data-cmd="export-nodes-csv">ส่งออกรายการโหนด (CSV)</button>
+          <button data-cmd="export-links-csv">ส่งออกรายการเส้น (CSV)</button>
+          <hr>
+          <button data-cmd="export-png">ส่งออกภาพ PNG</button>
+          <button data-cmd="export-svg">ส่งออกภาพ SVG</button>
+          <hr>
+          <button data-cmd="load-sample">โหลดเครือข่ายตัวอย่าง</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="edit"><button class="menu-btn">แก้ไข</button>
+        <div class="menu-list">
+          <button data-cmd="undo">เลิกทำ <kbd>Ctrl+Z</kbd></button>
+          <button data-cmd="redo">ทำซ้ำ <kbd>Ctrl+Y</kbd></button>
+          <hr>
+          <button data-cmd="select-all">เลือกทั้งหมด <kbd>Ctrl+A</kbd></button>
+          <button data-cmd="duplicate">ทำสำเนาที่เลือก <kbd>Ctrl+D</kbd></button>
+          <button data-cmd="delete">ลบที่เลือก <kbd>Delete</kbd></button>
+          <hr>
+          <button data-cmd="add-sibling">จดหัวข้อถัดไป (พี่น้อง) <kbd>Enter</kbd></button>
+          <button data-cmd="add-child">จดหัวข้อย่อย (ลูก) <kbd>Tab</kbd></button>
+          <hr>
+          <button data-cmd="add-node">เพิ่มโหนดอิสระ <kbd>N</kbd></button>
+          <button data-cmd="add-note">เพิ่มโน้ต <kbd>T</kbd></button>
+          <button data-cmd="add-group">สร้างกรอบรอบที่เลือก <kbd>G</kbd></button>
+          <button data-cmd="connect-selected">เชื่อมโหนดที่เลือกเป็นสาย</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="layout"><button class="menu-btn">จัดผัง</button>
+        <div class="menu-list">
+          <button data-cmd="layout:mindmap">มายแมป ซ้าย-ขวา รอบหัวข้อหลัก <kbd>1</kbd></button>
+          <button data-cmd="layout:hierarchical">ต้นไม้ บน→ล่าง <kbd>2</kbd></button>
+          <button data-cmd="layout:hierarchical-lr">ต้นไม้ ซ้าย→ขวา</button>
+          <button data-cmd="layout:force">กระจายแรง (force-directed) <kbd>3</kbd></button>
+          <button data-cmd="layout:circular">วงกลม <kbd>4</kbd></button>
+          <button data-cmd="layout:grouped">จัดกลุ่มตามประเภท <kbd>5</kbd></button>
+          <button data-cmd="layout:grouped-community">จัดกลุ่มตามชุมชน</button>
+          <button data-cmd="layout:timeline">ไทม์ไลน์ (ตามวันเวลา) <kbd>6</kbd></button>
+          <button data-cmd="layout:grid">ตาราง</button>
+          <hr>
+          <label class="menu-check"><input type="checkbox" id="opt-auto-arrange" checked> จัดผังมายแมปอัตโนมัติเมื่อจดหัวข้อใหม่</label>
+          <label class="menu-check"><input type="checkbox" id="layout-selected-only"> จัดเฉพาะที่เลือก</label>
+          <hr>
+          <button data-cmd="fit">ฟิตให้พอดีจอ <kbd>F</kbd></button>
+          <button data-cmd="zoom-100">ซูม 100% <kbd>0</kbd></button>
+        </div>
+      </div>
+      <div class="menu" data-menu="analysis"><button class="menu-btn">วิเคราะห์</button>
+        <div class="menu-list">
+          <button data-cmd="analysis:degree">Degree centrality</button>
+          <button data-cmd="analysis:weighted">Weighted degree</button>
+          <button data-cmd="analysis:betweenness">Betweenness centrality</button>
+          <button data-cmd="analysis:closeness">Closeness centrality</button>
+          <hr>
+          <button data-cmd="analysis:louvain">หาชุมชน (Louvain)</button>
+          <button data-cmd="analysis:lpa">หาชุมชน (Label propagation)</button>
+          <button data-cmd="analysis:components">หาคอมโพเนนต์ที่เชื่อมกัน</button>
+          <hr>
+          <button data-cmd="analysis:path">เส้นทางสั้นสุดระหว่าง 2 โหนดที่เลือก <kbd>P</kbd></button>
+          <hr>
+          <button data-cmd="analysis:clear">ล้างผลวิเคราะห์บนผัง</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="view"><button class="menu-btn">มุมมอง</button>
+        <div class="menu-list">
+          <button data-cmd="expand">ขยายเพื่อนบ้านของที่เลือก <kbd>E</kbd></button>
+          <button data-cmd="focus">ซ่อนที่ไม่เกี่ยวกับที่เลือก <kbd>H</kbd></button>
+          <button data-cmd="hide-selected">ซ่อนที่เลือก</button>
+          <button data-cmd="show-all">แสดงทั้งหมด <kbd>Shift+H</kbd></button>
+          <hr>
+          <label class="menu-check"><input type="checkbox" id="opt-link-labels" checked> แสดงป้ายเส้นเชื่อม</label>
+          <label class="menu-check"><input type="checkbox" id="opt-grid" checked> แสดงตารางพื้นหลัง</label>
+          <label class="menu-check"><input type="checkbox" id="opt-snap"> ดูดเข้าตาราง</label>
+          <hr>
+          <button data-cmd="toggle-panel">ซ่อน/แสดงแผงด้านขวา <kbd>\</kbd></button>
+          <button data-cmd="help">คีย์ลัดและวิธีใช้ <kbd>?</kbd></button>
+        </div>
+      </div>
+    </nav>
+    <div class="spacer"></div>
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="ค้นหาโหนด/เส้น…  (Ctrl+F)" autocomplete="off">
+      <div id="search-results" class="search-results hidden"></div>
+    </div>
+    <div class="topbar-right">
+      <button id="btn-undo" class="icon-btn" title="เลิกทำ (Ctrl+Z)">↶</button>
+      <button id="btn-redo" class="icon-btn" title="ทำซ้ำ (Ctrl+Y)">↷</button>
+      <span id="zoom-label" class="zoom-label" title="คลิกเพื่อฟิต">100%</span>
+    </div>
+  </header>
+
+  <div id="workspace">
+    <!-- แถบเครื่องมือซ้าย -->
+    <aside id="toolbar">
+      <button class="tool" data-tool="select" title="เลือก/ลาก (V)"><span>⬚</span><small>เลือก</small></button>
+      <button class="tool" data-tool="pan" title="เลื่อนผืนผ้าใบ (H หรือกด Space ค้าง)"><span>✋</span><small>เลื่อน</small></button>
+      <button class="tool" data-tool="node" title="เพิ่มโหนด: คลิกบนผืนผ้าใบ (N)"><span>●</span><small>โหนด</small></button>
+      <button class="tool" data-tool="link" title="เชื่อมเส้น: คลิกโหนดต้นทางแล้วคลิกปลายทาง (L)"><span>⟶</span><small>เส้น</small></button>
+      <button class="tool" data-tool="note" title="โน้ตติดกาว (T)"><span>🗒</span><small>โน้ต</small></button>
+      <button class="tool" data-tool="group" title="กรอบจัดกลุ่ม: ลากเพื่อวาดกรอบ (G)"><span>▢</span><small>กรอบ</small></button>
+      <div class="tool-sep"></div>
+      <div id="type-palette" class="type-palette" title="ประเภทของโหนดใหม่"></div>
+    </aside>
+
+    <!-- ผืนผ้าใบ -->
+    <main id="canvas-wrap">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg" tabindex="0">
+        <defs>
+          <pattern id="grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e5e7eb" stroke-width="0.6"/>
+          </pattern>
+          <pattern id="grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+            <rect width="100" height="100" fill="url(#grid-small)"/>
+            <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#d1d5db" stroke-width="1"/>
+          </pattern>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#0f172a" flood-opacity="0.18"/>
+          </filter>
+        </defs>
+        <rect id="grid-bg" width="100%" height="100%" fill="url(#grid-large)"/>
+        <g id="viewport">
+          <g id="layer-groups"></g>
+          <g id="layer-links"></g>
+          <g id="layer-nodes"></g>
+          <g id="layer-overlay"></g>
+        </g>
+      </svg>
+      <input id="inline-editor" class="inline-editor hidden" spellcheck="false">
+      <div id="context-menu" class="context-menu hidden"></div>
+      <div id="empty-hint" class="empty-hint hidden"><b>เริ่มจดได้เลย:</b> กด <kbd>Enter</kbd> หรือดับเบิลคลิกเพื่อสร้างหัวข้อหลัก · พิมพ์แล้วกด <kbd>Tab</kbd> = หัวข้อย่อย · <kbd>Enter</kbd> = หัวข้อถัดไป<br>แอปจะจัดผังมายแมปให้เองทุกครั้ง · ลากจากจุดเล็กข้างหัวข้อเพื่อเชื่อมเส้นเพิ่ม</div>
+    </main>
+
+    <!-- แผงขวา -->
+    <aside id="side-panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="inspector">คุณสมบัติ</button>
+        <button class="tab" data-tab="table">รายการ</button>
+        <button class="tab" data-tab="analysis">วิเคราะห์</button>
+        <button class="tab" data-tab="legend">ตำนาน</button>
+      </div>
+      <section class="tab-pane active" data-pane="inspector" id="inspector"></section>
+      <section class="tab-pane" data-pane="table" id="table-pane"></section>
+      <section class="tab-pane" data-pane="analysis" id="analysis-pane"></section>
+      <section class="tab-pane" data-pane="legend" id="legend-pane"></section>
+    </aside>
+  </div>
+
+  <footer id="statusbar">
+    <span id="status-counts"></span>
+    <span id="status-selection"></span>
+    <span class="spacer"></span>
+    <span id="status-hint"></span>
+    <span id="status-saved" title="บันทึกอัตโนมัติในเบราว์เซอร์นี้"></span>
+  </footer>
+</div>
+
+<input type="file" id="file-json" accept=".json,application/json" class="hidden">
+<input type="file" id="file-csv" accept=".csv,.txt,.tsv,text/csv" class="hidden">
+
+<!-- กล่องโต้ตอบนำเข้า CSV -->
+<dialog id="dlg-csv">
+  <form method="dialog" class="dialog-body">
+    <h2>นำเข้า CSV</h2>
+    <p class="muted">รองรับ 3 รูปแบบ: <b>รายการโหนด</b> (คอลัมน์ ชื่อ/label, ประเภท/type, วันที่, แหล่งที่มา และคอลัมน์อื่นเป็นแอตทริบิวต์), <b>รายการเส้น</b> (from, to, label, weight, date …) และ <b>ตารางความสัมพันธ์แถวละ 1 แถว</b> (ต้นทาง, ปลายทาง, ความสัมพันธ์ — สร้างโหนดให้อัตโนมัติ ใส่ from_type/to_type ได้)</p>
+    <div class="row">
+      <button type="button" id="csv-pick" class="btn">เลือกไฟล์…</button>
+      <span id="csv-filename" class="muted"></span>
+      <span class="spacer"></span>
+      <label>ชนิดข้อมูล
+        <select id="csv-mode">
+          <option value="auto">ตรวจอัตโนมัติ</option>
+          <option value="nodes">รายการโหนด</option>
+          <option value="links">รายการเส้น / ตารางความสัมพันธ์</option>
+        </select>
+      </label>
+    </div>
+    <textarea id="csv-text" rows="8" placeholder="หรือวางข้อความ CSV ที่นี่…&#10;from,to,label&#10;สมชาย,บจก.เอ,กรรมการ"></textarea>
+    <div id="csv-preview" class="csv-preview"></div>
+    <div class="row">
+      <label><input type="checkbox" id="csv-layout-after" checked> จัดผังอัตโนมัติหลังนำเข้า</label>
+      <span class="spacer"></span>
+      <button type="button" class="btn" value="cancel" id="csv-cancel">ยกเลิก</button>
+      <button type="button" class="btn primary" id="csv-import">นำเข้า</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ช่วยเหลือ -->
+<dialog id="dlg-help">
+  <div class="dialog-body">
+    <h2>คีย์ลัดและวิธีใช้ LinkMap</h2>
+    <div class="help-grid">
+      <div>
+        <h3>ผืนผ้าใบ</h3>
+        <ul>
+          <li><b>ล้อเมาส์</b> ซูม · <b>ลากปุ่มกลาง / Space+ลาก / เครื่องมือเลื่อน</b> แพน</li>
+          <li><b>ดับเบิลคลิกพื้นว่าง</b> สร้างหัวข้อ · <b>ดับเบิลคลิกหัวข้อ/เส้น</b> แก้ข้อความ</li>
+          <li><b>ลากพื้นว่าง</b> เลือกเป็นกรอบ · <b>Shift+คลิก</b> เลือกเพิ่ม/ลด</li>
+          <li><b>ลากจากจุดเล็กข้างโหนด</b> (หรือ Alt+ลากโหนด) สร้างเส้นเชื่อม</li>
+          <li><b>คลิกขวา</b> เมนูลัด · <b>ลากมุมขวาล่าง</b> ปรับขนาดโน้ต/กรอบ</li>
+        </ul>
+      </div>
+      <div>
+        <h3>คีย์ลัด</h3>
+        <ul>
+          <li><b>โหมดจดเรียน:</b> <kbd>Enter</kbd> หัวข้อถัดไป (พี่น้อง) · <kbd>Tab</kbd> หัวข้อย่อย · พิมพ์ตัวอักษรบนหัวข้อที่เลือกเพื่อแก้ทันที · <kbd>Ctrl+L</kbd> จัดผังมายแมป</li>
+          <li><kbd>V</kbd> เลือก <kbd>H</kbd> เลื่อน <kbd>N</kbd> โหนด <kbd>L</kbd> เส้น <kbd>T</kbd> โน้ต <kbd>G</kbd> กรอบ</li>
+          <li><kbd>Delete</kbd> ลบ · <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> เลิกทำ/ทำซ้ำ · <kbd>Ctrl+A</kbd> เลือกทั้งหมด · <kbd>Ctrl+D</kbd> ทำสำเนา</li>
+          <li><kbd>1</kbd>–<kbd>6</kbd> จัดผัง มายแมป / ต้นไม้ / force / วงกลม / กลุ่ม / ไทม์ไลน์ · <kbd>F</kbd> ฟิต · <kbd>0</kbd> 100%</li>
+          <li><kbd>E</kbd> ขยายเพื่อนบ้าน · <kbd>H</kbd>(ขณะเลือก) ซ่อนที่ไม่เกี่ยว · <kbd>Shift+H</kbd> แสดงทั้งหมด · <kbd>P</kbd> เส้นทางสั้นสุด</li>
+          <li><kbd>Ctrl+S</kbd> บันทึก JSON · <kbd>Ctrl+O</kbd> เปิด · <kbd>Ctrl+F</kbd> ค้นหา · <kbd>\</kbd> ซ่อนแผงขวา · <kbd>Esc</kbd> ยกเลิก/ล้างการเลือก</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted">ข้อมูลทั้งหมดอยู่ในเครื่องนี้เท่านั้น (บันทึกอัตโนมัติใน localStorage ของเบราว์เซอร์ และบันทึกเป็นไฟล์ JSON ได้)</p>
+    <div class="row"><span class="spacer"></span><button class="btn primary" onclick="this.closest('dialog').close()">ปิด</button></div>
+  </div>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
