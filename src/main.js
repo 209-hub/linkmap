@@ -280,8 +280,16 @@ app.dropInsert = (id, pt, snap) => {
   const newParent = app.tree.parent.get(nearest.id);
   if (!newParent) return false; // ใกล้รากเฉย ๆ → ไม่ทำอะไร (ปล่อยให้ย้ายตำแหน่งธรรมดา)
   const oldParent = app.tree.parent.get(id);
-  app.history.pushSnapshot(snap);
   const g = app.graph;
+  if (oldParent === newParent) {
+    // พี่น้องเดิม: ทำเฉพาะเมื่อปล่อยในตำแหน่งที่ทำให้ลำดับเปลี่ยนจริง ไม่งั้นปล่อยให้ย้ายตำแหน่งอิสระ
+    const cur = (app.tree.children.get(newParent) || []);
+    const others = cur.filter(s => s !== id).map(s => g.getNode(s)).sort((a, b) => a.y - b.y);
+    let idx = others.findIndex(s => pt.y < s.y); if (idx < 0) idx = others.length;
+    if (idx === cur.indexOf(id)) return false;
+    if (best > 40) return false; // ต้องปล่อยใกล้พี่น้องจริง ๆ
+  }
+  app.history.pushSnapshot(snap);
   if (oldParent !== newParent) {
     for (const l of g.linksOf(id)) if (l.to === id) g.removeLink(l.id);
     g.addLink({ from: newParent, to: id, label: '', directed: false });

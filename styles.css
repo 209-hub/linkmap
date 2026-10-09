@@ -112,6 +112,13 @@ kbd { font: 11px/1 ui-monospace, Consolas, monospace; background: #f1f5f9; borde
 .node.link-target .shape { stroke: var(--accent) !important; stroke-width: 5; }
 
 .node.topic .shape { filter: url(#shadow); }
+.add-btn { cursor: pointer; opacity: 0; transition: opacity .12s; }
+.node:hover .add-btn, .node.selected .add-btn { opacity: 1; }
+.add-btn .add-hit { fill: transparent; }
+.add-btn .add-bg { stroke: #fff; stroke-width: 2; filter: url(#shadow); }
+.add-btn .add-plus { stroke: #fff; stroke-width: 2.5; stroke-linecap: round; pointer-events: none; }
+.add-btn:hover .add-bg { r: 14; }
+@media (pointer: coarse) { .add-btn .add-bg { r: 15; } .add-btn .add-hit { r: 24; } .node .port { r: 9; } .node .port-hit { r: 18; } .collapse-btn .collapse-bg { r: 12; } }
 .node.topic .underline { stroke-linecap: round; }
 .node.topic .topic-img { pointer-events: none; }
 .theme-row { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 10px; }

@@ -47,7 +47,7 @@ export function buildExportSVG(renderer, { pad = 40, background = null } = {}) {
   svg.appendChild(bg);
   for (const layerId of ['layer-groups', 'layer-links', 'layer-nodes']) {
     const layer = src.querySelector('#' + layerId).cloneNode(true);
-    layer.querySelectorAll('.port, .resize-handle, .sel-ring, .sel-ring-rect, .hit').forEach(e => e.remove());
+    layer.querySelectorAll('.port, .resize-handle, .sel-ring, .sel-ring-rect, .hit, .add-btn').forEach(e => e.remove());
     layer.querySelectorAll('.selected').forEach(e => e.classList.remove('selected'));
     layer.querySelectorAll('.link-target').forEach(e => e.classList.remove('link-target'));
     svg.appendChild(layer);

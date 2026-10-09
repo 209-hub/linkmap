@@ -147,6 +147,8 @@ export class Renderer {
     this.nodeEls = new Map();
     this.linkEls = new Map();
     this.drag = null;
+    this.pointers = new Map(); // นิ้ว/พอยน์เตอร์ที่กดอยู่ (สำหรับ pinch zoom)
+    this.pinch = null;
     this.hoverNode = null;
     this.linkSource = null; // สำหรับเครื่องมือเส้น (คลิกต้นทาง → ปลายทาง)
     this._bind();
@@ -328,6 +330,7 @@ export class Renderer {
       el('text', { class: 'notes-ind' }, g);
       el('image', { class: 'topic-img', preserveAspectRatio: 'xMidYMid meet' }, g);
       el('line', { class: 'underline' }, g);
+      this._addPlusBtn(g);
       this.gNodes.appendChild(g);
       return g;
     }
@@ -350,8 +353,18 @@ export class Renderer {
     el('text', { class: 'badge' }, g);
     el('circle', { class: 'port', r: 6 }, g);
     el('circle', { class: 'port port-hit', r: 13 }, g);
+    this._addPlusBtn(g);
     this.gNodes.appendChild(g);
     return g;
+  }
+
+  /** ปุ่ม + แบบ Canva: แตะเพื่อสร้างหัวข้อ/โหนดที่เชื่อมกับโหนดนี้ */
+  _addPlusBtn(g) {
+    const b = el('g', { class: 'add-btn' }, g);
+    el('circle', { class: 'add-hit', r: 18 }, b);
+    el('circle', { class: 'add-bg', r: 12 }, b);
+    el('path', { class: 'add-plus', d: 'M-5,0 H5 M0,-5 V5' }, b);
+    return b;
   }
 
   _updateNodeEl(g, n, selected, dim) {
@@ -418,6 +431,9 @@ export class Renderer {
       } else cbtn.style.display = 'none';
       notesInd.textContent = n.notes ? '📝' : '';
       setAttrs(notesInd, { x: -tb.w / 2 + 2, y: -tb.h / 2 - 3 });
+      const addBtn = g.querySelector('.add-btn');
+      addBtn.setAttribute('transform', `translate(${side * (tb.w / 2 + (hasKids || n.collapsed ? 36 : 18))},0)`);
+      addBtn.querySelector('.add-bg').setAttribute('fill', color);
       return;
     }
     if (n.type === 'note') {
@@ -449,6 +465,9 @@ export class Renderer {
       badge.textContent = String(bd); setAttrs(badge, { x: r * 0.75, y: -r * 0.75 });
     } else { badgeBg.style.display = 'none'; badge.style.display = 'none'; }
     setAttrs(port, { cx: r + 10, cy: 0 }); setAttrs(portHit, { cx: r + 10, cy: 0 });
+    const addBtn = g.querySelector('.add-btn');
+    addBtn.setAttribute('transform', `translate(${r + 14},${-r - 4})`);
+    addBtn.querySelector('.add-bg').setAttribute('fill', color);
   }
 
   _createLinkEl(l) {
@@ -518,7 +537,7 @@ export class Renderer {
   _hitTest(target) {
     if (!target) return null;
     const nodeEl = target.closest?.('.node, .group');
-    if (nodeEl) return { kind: 'node', id: nodeEl.dataset.id, el: nodeEl, port: target.classList.contains('port'), handle: target.classList.contains('resize-handle'), collapse: !!target.closest('.collapse-btn') };
+    if (nodeEl) return { kind: 'node', id: nodeEl.dataset.id, el: nodeEl, port: target.classList.contains('port'), handle: target.classList.contains('resize-handle'), collapse: !!target.closest('.collapse-btn'), add: !!target.closest('.add-btn') };
     const linkEl = target.closest?.('.link');
     if (linkEl) return { kind: 'link', id: linkEl.dataset.id, el: linkEl };
     return null;
@@ -528,6 +547,19 @@ export class Renderer {
 
   _onDown(e) {
     if (e.button === 2) return;
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.pointerType === 'touch' && this.pointers.size === 2) {
+      // สองนิ้ว = บีบซูม/เลื่อน ยกเลิกการลากที่ค้างอยู่
+      this.cancelDrag();
+      const [p1, p2] = [...this.pointers.values()];
+      const r = this.svg.getBoundingClientRect();
+      const mid = { x: (p1.x + p2.x) / 2 - r.left, y: (p1.y + p2.y) / 2 - r.top };
+      const v = this.app.view;
+      this.pinch = { d0: Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1, k0: v.k, world: { x: (mid.x - v.x) / v.k, y: (mid.y - v.y) / v.k } };
+      try { this.svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      return;
+    }
+    if (this.pinch) return;
     this.app.hideContextMenu?.();
     this.app.closeInlineEditor?.(true);
     this.svg.focus({ preventScroll: true });
@@ -548,11 +580,11 @@ export class Renderer {
     if (panMode) {
       this.drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: this.app.view.x, vy: this.app.view.y };
       this.svg.classList.add('panning');
-      this.svg.setPointerCapture(e.pointerId);
+      try { this.svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       return;
     }
     if (e.button !== 0) return;
-    this.svg.setPointerCapture(e.pointerId);
+    try { this.svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
 
     if (tool === 'node' && !hit) { this.app.createNodeAt(this._snap(w.x), this._snap(w.y)); return; }
     if (tool === 'note' && !hit) { this.app.createNote(this._snap(w.x), this._snap(w.y)); return; }
@@ -578,6 +610,7 @@ export class Renderer {
     }
     // โหนด
     if (hit.collapse) { this.app.toggleCollapse(hit.id); return; }
+    if (hit.add) { this.app.select([hit.id]); this.app.addTopic('child'); return; }
     if (hit.port || e.altKey) { this._startLinkDrag(hit.id, e); return; }
     if (hit.handle) {
       const n = this.app.graph.getNode(hit.id); const box = nodeBox(n);
@@ -615,6 +648,19 @@ export class Renderer {
   }
 
   _onMove(e) {
+    if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pinch) {
+      if (this.pointers.size < 2) return;
+      const [p1, p2] = [...this.pointers.values()];
+      const r = this.svg.getBoundingClientRect();
+      const mid = { x: (p1.x + p2.x) / 2 - r.left, y: (p1.y + p2.y) / 2 - r.top };
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
+      const v = this.app.view;
+      v.k = Math.min(8, Math.max(0.05, this.pinch.k0 * dist / this.pinch.d0));
+      v.x = mid.x - this.pinch.world.x * v.k; v.y = mid.y - this.pinch.world.y * v.k;
+      this.applyView();
+      return;
+    }
     const d = this.drag;
     if (!d) return;
     const w = this.screenToWorld(e.clientX, e.clientY);
@@ -689,6 +735,11 @@ export class Renderer {
   }
 
   _onUp(e) {
+    this.pointers.delete(e.pointerId);
+    if (this.pinch) {
+      if (this.pointers.size < 2) { this.pinch = null; this.pointers.clear(); }
+      return;
+    }
     const d = this.drag;
     if (!d) return;
     this.drag = null;
