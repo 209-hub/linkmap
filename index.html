@@ -132,15 +132,19 @@
     <div class="topbar-right">
       <button id="btn-undo" class="icon-btn" title="เลิกทำ (Ctrl+Z)">↶</button>
       <button id="btn-redo" class="icon-btn" title="ทำซ้ำ (Ctrl+Y)">↷</button>
+      <button id="btn-panel" class="icon-btn" title="ซ่อน/แสดงแผงด้านขวา (\)">▥</button>
       <span id="zoom-label" class="zoom-label" title="คลิกเพื่อฟิต">100%</span>
     </div>
   </header>
 
-  <div id="workspace">
+  <div id="workspace" class="panel-hidden">
     <!-- แถบเครื่องมือซ้าย -->
     <aside id="toolbar">
       <button class="tool" data-tool="select" title="เลือก/ลาก (V)"><span>⬚</span><small>เลือก</small></button>
       <button class="tool" data-tool="pan" title="เลื่อนผืนผ้าใบ (H หรือกด Space ค้าง)"><span>✋</span><small>เลื่อน</small></button>
+      <button class="tool tool-action" data-cmd="layout:mindmap" title="จัดผังมายแมปมาตรฐาน ซ้าย-ขวา (1 หรือ Ctrl+L)"><span>⌗</span><small>จัดผัง</small></button>
+      <label class="tool-check" title="เมื่อเปิด: จัดผังใหม่ทุกครั้งที่เพิ่มหัวข้อ · เมื่อปิด: วางหัวข้อใหม่ข้างพ่อโดยไม่ขยับของเดิม"><input type="checkbox" id="tb-auto-arrange"><small>ออโต้<br>จัดผัง</small></label>
+      <div class="tool-sep"></div>
       <button class="tool" data-tool="node" title="เพิ่มโหนด: คลิกบนผืนผ้าใบ (N)"><span>●</span><small>โหนด</small></button>
       <button class="tool" data-tool="link" title="เชื่อมเส้น: คลิกโหนดต้นทางแล้วคลิกปลายทาง (L)"><span>⟶</span><small>เส้น</small></button>
       <button class="tool" data-tool="note" title="โน้ตติดกาว (T)"><span>🗒</span><small>โน้ต</small></button>
