@@ -400,7 +400,7 @@ export function openCsvDialog(app) {
 async function readTextSmart(file) {
   const buf = await file.arrayBuffer();
   const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buf);
-  const bad = (utf8.match(/�/g) || []).length;
+  const bad = (utf8.match(/FFFD/g) || []).length;
   if (bad > 0) {
     try { return new TextDecoder('windows-874').decode(buf); } catch { /* ไม่รองรับ */ }
   }
