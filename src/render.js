@@ -579,6 +579,7 @@ export class Renderer {
     const tool = this.app.tool;
     const panMode = e.button === 1 || tool === 'pan' || this.app.spaceDown;
     if (panMode) {
+      if (this.app.spaceDown) this.app._spaceDragged = true;
       this.drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: this.app.view.x, vy: this.app.view.y };
       this.svg.classList.add('panning');
       try { this.svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }

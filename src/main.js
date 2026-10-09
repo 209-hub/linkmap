@@ -926,7 +926,11 @@ window.addEventListener('keydown', (e) => {
   if (isTyping(e)) return;
   if (document.querySelector('dialog[open]')) return;
   const ctrl = e.ctrlKey || e.metaKey;
-  if (e.code === 'Space') { app.spaceDown = true; $('#canvas').classList.add('tool-pan'); e.preventDefault(); return; }
+  if (e.code === 'Space') {
+    // แตะ Space สั้น ๆ = สลับเครื่องมือ เลือก ⇄ เลื่อน · กดค้างแล้วลาก = เลื่อนชั่วคราว
+    if (!e.repeat) { app._spaceAt = performance.now(); app._spaceDragged = false; }
+    app.spaceDown = true; $('#canvas').classList.add('tool-pan'); e.preventDefault(); return;
+  }
   if (ctrl) {
     const k = e.key.toLowerCase();
     const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png', b: 'bold', i: 'italic', p: 'export-pdf' };
@@ -971,7 +975,14 @@ window.addEventListener('keydown', (e) => {
     editor.value = key; e.preventDefault();
   }
 });
-window.addEventListener('keyup', (e) => { if (e.code === 'Space') { app.spaceDown = false; if (app.tool !== 'pan') $('#canvas').classList.remove('tool-pan'); } });
+window.addEventListener('keyup', (e) => {
+  if (e.code !== 'Space') return;
+  app.spaceDown = false;
+  const tapped = app._spaceAt && performance.now() - app._spaceAt < 350 && !app._spaceDragged && !isTyping(e);
+  if (tapped) { app.setTool(app.tool === 'pan' ? 'select' : 'pan'); app.toast(app.tool === 'pan' ? 'โหมดเลื่อน (Space สลับกลับ)' : 'โหมดเลือก'); }
+  else if (app.tool !== 'pan') $('#canvas').classList.remove('tool-pan');
+  app._spaceAt = 0;
+});
 
 // ---------------------------------------------------------------- เริ่มต้น
 function boot() {
