@@ -24,7 +24,11 @@ const EXPORT_CSS = `
   .link.highlight .arrow { fill: #f59e0b !important; }
 `;
 
-export function buildExportSVG(renderer, { pad = 40, background = '#ffffff' } = {}) {
+import { buildImagePDF, PAGE_SIZES } from './pdf.js';
+import { getTheme } from './types.js';
+
+export function buildExportSVG(renderer, { pad = 40, background = null } = {}) {
+  background = background || getTheme().bg || '#ffffff';
   const b = renderer.contentBounds();
   if (!b) throw new Error('ไม่มีอะไรให้ส่งออก');
   const src = renderer.svg;
@@ -67,12 +71,12 @@ export function exportSVG(renderer, filename) {
   downloadText(filename, buildExportSVG(renderer), 'image/svg+xml;charset=utf-8');
 }
 
-export function exportPNG(renderer, filename, { scale = 2 } = {}) {
+/** เรนเดอร์ผังเป็น canvas (ใช้ร่วมกันสำหรับ PNG/JPEG/PDF) */
+export function renderToCanvas(renderer, { scale = 2, maxDim = 8000 } = {}) {
   return new Promise((resolve, reject) => {
     const svgText = buildExportSVG(renderer);
     const b = renderer.contentBounds();
     const w = Math.ceil(b.w + 80), h = Math.ceil(b.h + 80);
-    const maxDim = 8000;
     const s = Math.min(scale, maxDim / Math.max(w, h));
     const img = new Image();
     const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }));
@@ -81,14 +85,36 @@ export function exportPNG(renderer, filename, { scale = 2 } = {}) {
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(w * s); canvas.height = Math.round(h * s);
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = getTheme().bg || '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => { URL.revokeObjectURL(url); if (!blob) return reject(new Error('สร้าง PNG ไม่สำเร็จ')); downloadBlob(filename, blob); resolve(); }, 'image/png');
+        URL.revokeObjectURL(url); resolve(canvas);
       } catch (err) { URL.revokeObjectURL(url); reject(err); }
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('เรนเดอร์ภาพไม่สำเร็จ')); };
     img.src = url;
   });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('สร้างภาพไม่สำเร็จ')), type, quality));
+}
+
+/** ส่งออกภาพ format = 'png' | 'jpeg' */
+export async function exportImage(renderer, filename, { format = 'png', scale = 2, quality = 0.92 } = {}) {
+  const canvas = await renderToCanvas(renderer, { scale });
+  const blob = await canvasToBlob(canvas, format === 'jpeg' ? 'image/jpeg' : 'image/png', quality);
+  downloadBlob(filename, blob);
+}
+export function exportPNG(renderer, filename, opts = {}) { return exportImage(renderer, filename, { ...opts, format: 'png' }); }
+
+/** ส่งออก PDF: page = 'fit' (หน้าพอดีภาพ) | 'a4landscape' | 'a4' | 'a3landscape' */
+export async function exportPDF(renderer, filename, { page = 'fit', scale = 2, title = 'LinkMap' } = {}) {
+  const canvas = await renderToCanvas(renderer, { scale, maxDim: 6000 });
+  const blob = await canvasToBlob(canvas, 'image/jpeg', 0.92);
+  const jpeg = new Uint8Array(await blob.arrayBuffer());
+  const size = PAGE_SIZES[page] || null;
+  const pdf = buildImagePDF(jpeg, canvas.width, canvas.height, size ? { title, pageWidth: size.w, pageHeight: size.h } : { title });
+  downloadBlob(filename, new Blob([pdf], { type: 'application/pdf' }));
 }
 
 export function safeFilename(name, ext) {

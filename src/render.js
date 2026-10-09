@@ -1,5 +1,5 @@
 // ตัวเรนเดอร์ SVG + การโต้ตอบบนผืนผ้าใบ (ซูม/แพน ลาก เลือก สร้างเส้น ปรับขนาด)
-import { typeInfo, heatColor, paletteColor } from './types.js';
+import { typeInfo, heatColor, paletteColor, getTheme } from './types.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 export const BASE_R = 22;
@@ -16,12 +16,22 @@ function setAttrs(e, attrs) { for (const [k, v] of Object.entries(attrs)) if (v 
 
 export function isBox(node) { return node.type === 'note' || node.type === 'group' || node.type === 'topic'; }
 /** ขนาดกล่องหัวข้อ (มายแมป) คำนวณจากความยาวข้อความ */
+export const IMAGE_MAX_W = 220;
 export function topicBox(node) {
   const text = (node.mark ? node.mark + ' ' : '') + (node.label || ' ');
   const lines = wrapText(text, 22, 3);
   const longest = Math.max(...lines.map(l => l.length));
   const scale = node.level === 0 ? 1.25 : 1;
-  return { w: Math.max(70, longest * 8.2 * scale + 28), h: (lines.length * 18 + 16) * scale, lines, scale };
+  const bold = node.bold || node.level <= 1 ? 1.06 : 1;
+  let w = Math.max(70, longest * 8.2 * scale * bold + 28);
+  let h = (lines.length * 18 + 16) * scale;
+  let img = null;
+  if (node.image && node.imageW && node.imageH) {
+    const iw = Math.min(IMAGE_MAX_W, node.imageW), ih = node.imageH * (iw / node.imageW);
+    img = { w: iw, h: ih };
+    w = Math.max(w, iw + 20); h += ih + 8;
+  }
+  return { w, h, lines, scale, img };
 }
 export function nodeBox(node) {
   if (node.type === 'note') return { w: node.w || NOTE_DEFAULT.w, h: node.h || NOTE_DEFAULT.h };
@@ -316,6 +326,8 @@ export class Renderer {
       el('circle', { class: 'collapse-bg', r: 9 }, cg);
       el('text', { class: 'collapse-txt' }, cg);
       el('text', { class: 'notes-ind' }, g);
+      el('image', { class: 'topic-img', preserveAspectRatio: 'xMidYMid meet' }, g);
+      el('line', { class: 'underline' }, g);
       this.gNodes.appendChild(g);
       return g;
     }
@@ -356,8 +368,9 @@ export class Renderer {
     }
     if (n.type === 'topic') {
       const tb = topicBox(n);
-      const [ring, rect, text, badgeBg, badge, port, portHit, portL, portLHit, cbtn, notesInd] = g.children;
-      const color = this.nodeStroke(n);
+      const [ring, rect, text, badgeBg, badge, port, portHit, portL, portLHit, cbtn, notesInd, img, uline] = g.children;
+      const theme = getTheme();
+      const color = this.app.visual.color?.get(n.id) || n.color || n.branchColor || theme.root;
       const tree = this.app.tree;
       const parentId = tree?.parent?.get(n.id);
       const parentNode = parentId ? this.app.graph.getNode(parentId) : null;
@@ -365,14 +378,28 @@ export class Renderer {
       const kids = tree?.children?.get(n.id) || [];
       const hasKids = kids.length > 0;
       const sz = this.app.visual.size?.get(n.id);
-      setAttrs(ring, { x: -tb.w / 2 - 5, y: -tb.h / 2 - 5, width: tb.w + 10, height: tb.h + 10, rx: 14 });
-      setAttrs(rect, { x: -tb.w / 2, y: -tb.h / 2, width: tb.w, height: tb.h, rx: 10, stroke: color });
-      rect.style.fill = this.app.visual.fill?.get(n.id) || (n.level === 0 ? color : (n.level === 1 ? color + '1a' : '#fff'));
-      rect.style.strokeWidth = n.level === 0 ? 0 : (sz != null ? 1.5 + sz * 4 : (n.level === 1 ? 2.5 : 1.8));
+      const shape = n.shape || (n.level === 0 ? 'pill' : 'rounded');
+      const rx = shape === 'pill' ? tb.h / 2 : shape === 'rect' ? 2 : 10;
+      setAttrs(ring, { x: -tb.w / 2 - 5, y: -tb.h / 2 - 5, width: tb.w + 10, height: tb.h + 10, rx: rx + 4 });
+      setAttrs(rect, { x: -tb.w / 2, y: -tb.h / 2, width: tb.w, height: tb.h, rx, stroke: color });
+      const isRoot = n.level === 0;
+      if (shape === 'underline') {
+        rect.style.fill = this.app.visual.fill?.get(n.id) || 'transparent'; rect.style.strokeWidth = 0;
+        uline.style.display = '';
+        setAttrs(uline, { x1: -tb.w / 2, x2: tb.w / 2, y1: tb.h / 2, y2: tb.h / 2, stroke: color, 'stroke-width': isRoot ? 4 : 2.5 });
+      } else {
+        uline.style.display = 'none';
+        rect.style.fill = this.app.visual.fill?.get(n.id) || (isRoot ? color : (n.level === 1 ? color + (theme.dark ? '33' : '1a') : theme.box));
+        rect.style.strokeWidth = isRoot ? 0 : (sz != null ? 1.5 + sz * 4 : (n.level === 1 ? 2.5 : 1.8));
+      }
       text.textContent = '';
       const fs = 13 * tb.scale;
-      tb.lines.forEach((ln, i) => { const ts = el('tspan', { x: 0, y: -tb.h / 2 + (12 + 5) * tb.scale + i * 18 * tb.scale }, text); ts.textContent = ln; });
-      setAttrs(text, { fill: n.level === 0 ? '#fff' : '#0f172a', 'font-size': fs, 'font-weight': n.level <= 1 ? 700 : 500 });
+      const imgH = tb.img ? tb.img.h + 8 : 0;
+      tb.lines.forEach((ln, i) => { const ts = el('tspan', { x: 0, y: -tb.h / 2 + imgH + (12 + 5) * tb.scale + i * 18 * tb.scale }, text); ts.textContent = ln; });
+      const rootFilled = isRoot && shape !== 'underline';
+      setAttrs(text, { fill: rootFilled ? (theme.dark ? '#0f172a' : '#fff') : theme.text, 'font-size': fs, 'font-weight': n.bold || n.level <= 1 ? 700 : 500, 'font-style': n.italic ? 'italic' : 'normal' });
+      if (tb.img) { img.style.display = ''; setAttrs(img, { href: n.image, x: -tb.img.w / 2, y: -tb.h / 2 + 6, width: tb.img.w, height: tb.img.h }); }
+      else { img.style.display = 'none'; img.removeAttribute('href'); }
       const bd = this.app.visual.badge?.get(n.id);
       if (bd != null) { badgeBg.style.display = ''; badge.style.display = ''; setAttrs(badgeBg, { cx: tb.w / 2, cy: -tb.h / 2, fill: paletteColor(bd) }); badge.textContent = String(bd); setAttrs(badge, { x: tb.w / 2, y: -tb.h / 2 }); }
       else { badgeBg.style.display = 'none'; badge.style.display = 'none'; }
@@ -683,6 +710,10 @@ export class Renderer {
         this.app.history.pushSnapshot(d.snap);
         this.app.reparent(mid, d.target);
         return;
+      }
+      if (d.moved && d.type === 'move' && d.ids.size === 1) {
+        const [mid] = d.ids;
+        if (this.app.dropInsert?.(mid, this.screenToWorld(e.clientX, e.clientY), d.snap)) return;
       }
       if (d.moved) { this.app.history.pushSnapshot(d.snap); this.app.changed({ structural: false }); }
       return;

@@ -1,5 +1,5 @@
 // แผงด้านขวา: คุณสมบัติ / รายการ / วิเคราะห์ / ตำนาน และกล่องนำเข้า CSV
-import { ENTITY_TYPES, TYPE_ORDER, typeInfo, paletteColor } from './types.js';
+import { ENTITY_TYPES, TYPE_ORDER, typeInfo, paletteColor, THEMES } from './types.js';
 import { parseCSV, rowsToObjects, detectKind, importCSV } from './csv.js';
 import { nodeBox } from './render.js';
 
@@ -109,6 +109,11 @@ function renderNodeInspector(app, pane, n) {
     <h2 class="panel-title"><span class="chip" style="background:${n.color || t.color}">${t.icon} ${t.label}</span><span class="muted" style="font-size:11px">${esc(n.id)}</span></h2>
     ${field(isBoxNode ? (n.type === 'note' ? 'ข้อความโน้ต' : 'ชื่อกรอบ') : 'ชื่อ', n.type === 'note' ? `<textarea rows="4" data-prop="label">${esc(n.label)}</textarea>` : `<input data-prop="label" value="${esc(n.label)}">`)}
     ${n.type === 'topic' ? field('เครื่องหมายเน้น', `<div class="mark-row">${MARKS.map(m => `<button class="btn small ${n.mark === m ? 'primary' : ''}" data-mark="${m}">${m || 'ไม่มี'}</button>`).join('')}</div>`) : ''}
+    ${n.type === 'topic' ? `<div class="field-row">
+      ${field('รูปทรง', `<select data-shape><option value="auto" ${!n.shape ? 'selected' : ''}>อัตโนมัติ</option><option value="rounded" ${n.shape === 'rounded' ? 'selected' : ''}>มุมโค้ง</option><option value="pill" ${n.shape === 'pill' ? 'selected' : ''}>แคปซูล</option><option value="rect" ${n.shape === 'rect' ? 'selected' : ''}>สี่เหลี่ยม</option><option value="underline" ${n.shape === 'underline' ? 'selected' : ''}>ขีดเส้นใต้</option></select>`)}
+      ${field('ตัวอักษร', `<div class="row" style="margin:0;gap:4px"><button class="btn small ${n.bold ? 'primary' : ''}" data-cmd="bold" title="Ctrl+B"><b>B</b></button><button class="btn small ${n.italic ? 'primary' : ''}" data-cmd="italic" title="Ctrl+I"><i>I</i></button><button class="btn small" data-act="shape-branch" title="ใช้รูปทรงนี้กับทั้งกิ่ง">ทั้งกิ่ง</button></div>`)}
+    </div>
+    ${field('รูปภาพ', `${n.image ? `<img class="img-thumb" src="${n.image}" alt="">` : ''}<div class="row" style="margin:0"><button class="btn small" data-cmd="image-add">${n.image ? 'เปลี่ยนรูป…' : 'เพิ่มรูป…'}</button>${n.image ? '<button class="btn small" data-cmd="image-remove">ลบรูป</button>' : ''}<span class="muted" style="font-size:11px">หรือกด Ctrl+V วางรูปจากคลิปบอร์ด</span></div>`)}` : ''}
     ${isBoxNode ? '' : field('ประเภท', `<select data-prop="type">${typeOptions(n.type)}</select>`)}
     <div class="field-row">
       ${field('สี', `<div class="row" style="margin:0"><input type="color" data-prop="color" value="${n.color || t.color}"><button class="btn small" data-act="reset-color" title="ใช้สีตามประเภท">ล้าง</button></div>`)}
@@ -131,6 +136,8 @@ function renderNodeInspector(app, pane, n) {
   bindProps(pane, app, (patch) => app.mutate(g => g.updateNode(n.id, patch)), n);
   pane.querySelector('[data-act="reset-color"]').addEventListener('click', () => app.mutate(g => g.updateNode(n.id, { color: null })));
   pane.querySelectorAll('[data-mark]').forEach(b => b.addEventListener('click', () => app.setMark(b.dataset.mark)));
+  pane.querySelector('[data-shape]')?.addEventListener('change', (e) => app.run('shape:' + e.target.value));
+  pane.querySelector('[data-act="shape-branch"]')?.addEventListener('click', () => app.run('shape-branch:' + (pane.querySelector('[data-shape]').value)));
   pane.querySelectorAll('.link-list tr[data-id]').forEach(tr => tr.addEventListener('click', () => app.select([tr.dataset.id])));
 }
 

@@ -31,8 +31,12 @@
           <button data-cmd="export-nodes-csv">ส่งออกรายการโหนด (CSV)</button>
           <button data-cmd="export-links-csv">ส่งออกรายการเส้น (CSV)</button>
           <hr>
-          <button data-cmd="export-png">ส่งออกภาพ PNG</button>
+          <button data-cmd="export-png">ส่งออกภาพ PNG <kbd>Ctrl+E</kbd></button>
+          <button data-cmd="export-jpeg">ส่งออกภาพ JPEG</button>
           <button data-cmd="export-svg">ส่งออกภาพ SVG</button>
+          <button data-cmd="export-pdf">ส่งออก PDF (หน้าพอดีผัง) <kbd>Ctrl+P</kbd></button>
+          <button data-cmd="export-pdf-a4">ส่งออก PDF A4 แนวนอน</button>
+          <button data-cmd="export-pdf-a3">ส่งออก PDF A3 แนวนอน</button>
           <hr>
           <button data-cmd="load-sample">โหลดเครือข่ายตัวอย่าง</button>
         </div>
@@ -48,6 +52,10 @@
           <hr>
           <button data-cmd="add-sibling">จดหัวข้อถัดไป (พี่น้อง) <kbd>Enter</kbd></button>
           <button data-cmd="add-child">จดหัวข้อย่อย (ลูก) <kbd>Tab</kbd></button>
+          <button data-cmd="bold">ตัวหนา <kbd>Ctrl+B</kbd></button>
+          <button data-cmd="italic">ตัวเอียง <kbd>Ctrl+I</kbd></button>
+          <button data-cmd="image-add">ใส่รูปภาพในหัวข้อ…</button>
+          <hr>
           <button data-cmd="toggle-collapse">ยุบ/ขยายกิ่ง <kbd>/</kbd></button>
           <button data-cmd="expand-all">ขยายทุกกิ่ง</button>
           <button data-cmd="move-up">เลื่อนหัวข้อขึ้น <kbd>Ctrl+↑</kbd></button>
@@ -103,6 +111,9 @@
           <button data-cmd="focus">ซ่อนที่ไม่เกี่ยวกับที่เลือก <kbd>H</kbd></button>
           <button data-cmd="hide-selected">ซ่อนที่เลือก</button>
           <button data-cmd="show-all">แสดงทั้งหมด <kbd>Shift+H</kbd></button>
+          <hr>
+          <div class="cm-title" style="padding:4px 10px;font-size:11px;color:var(--muted)">ธีมสี</div>
+          <div class="theme-row" id="theme-row"></div>
           <hr>
           <label class="menu-check"><input type="checkbox" id="opt-link-labels" checked> แสดงป้ายเส้นเชื่อม</label>
           <label class="menu-check"><input type="checkbox" id="opt-grid" checked> แสดงตารางพื้นหลัง</label>
@@ -192,6 +203,7 @@
 
 <input type="file" id="file-json" accept=".json,application/json" class="hidden">
 <input type="file" id="file-csv" accept=".csv,.txt,.tsv,text/csv" class="hidden">
+<input type="file" id="file-image" accept="image/*" class="hidden">
 
 <!-- กล่องโต้ตอบนำเข้า CSV -->
 <dialog id="dlg-csv">
@@ -255,6 +267,7 @@
         <h3>คีย์ลัด</h3>
         <ul>
           <li><b>โหมดจดเรียน:</b> <kbd>Enter</kbd> หัวข้อถัดไป (พี่น้อง) · <kbd>Tab</kbd> หัวข้อย่อย · พิมพ์ตัวอักษรบนหัวข้อที่เลือกเพื่อแก้ทันที · <kbd>Ctrl+L</kbd> จัดผังมายแมป</li>
+          <li><b>ตกแต่ง:</b> <kbd>Ctrl+B</kbd> ตัวหนา · <kbd>Ctrl+I</kbd> ตัวเอียง · <kbd>Ctrl+V</kbd> วางรูปลงหัวข้อ (หรือวางข้อความแบบรายการเพื่อสร้างกิ่ง) · ธีมสี/ธีมมืดที่เมนูมุมมอง · <kbd>Ctrl+P</kbd> ส่งออก PDF</li>
           <li><b>มายแมป:</b> <kbd>←↑↓→</kbd> เดินไปหัวข้อข้างเคียง · <kbd>/</kbd> ยุบ/ขยายกิ่ง · <kbd>Ctrl+↑/↓</kbd> สลับลำดับ · <kbd>Delete</kbd> ลบทั้งกิ่ง · <kbd>Shift+Del</kbd> ลบเฉพาะหัวข้อ · <kbd>Home</kbd> ไปหัวข้อหลัก · ลากหัวข้อไปวางบนหัวข้ออื่น = ย้ายกิ่ง · <kbd>Ctrl+M</kbd> นำเข้าโครงร่างข้อความ</li>
           <li><kbd>V</kbd> เลือก <kbd>H</kbd> เลื่อน <kbd>N</kbd> โหนด <kbd>L</kbd> เส้น <kbd>T</kbd> โน้ต <kbd>G</kbd> กรอบ</li>
           <li><kbd>Delete</kbd> ลบ · <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> เลิกทำ/ทำซ้ำ · <kbd>Ctrl+A</kbd> เลือกทั้งหมด · <kbd>Ctrl+D</kbd> ทำสำเนา</li>

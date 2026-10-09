@@ -1,6 +1,6 @@
 // ประเภทเอนทิตี สี และไอคอน (ไม่มี dependency ภายนอก)
 export const ENTITY_TYPES = {
-  topic:   { label: 'หัวข้อ',    color: '#334155', icon: '' },
+  topic:   { label: 'หัวข้อ',    color: '#334155', icon: '' }, // สีจริงมาจากธีม (getTheme().root)
   person:  { label: 'บุคคล',     color: '#2563eb', icon: '👤' },
   org:     { label: 'องค์กร',    color: '#7c3aed', icon: '🏢' },
   place:   { label: 'สถานที่',   color: '#059669', icon: '📍' },
@@ -19,10 +19,27 @@ export function typeInfo(type) {
   return ENTITY_TYPES[type] || ENTITY_TYPES.generic;
 }
 
-export const PALETTE = [
-  '#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#db2777',
-  '#0891b2', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#9333ea',
-];
+export const THEMES = {
+  classic: { name: 'คลาสสิก', dark: false, bg: '#fafafa', root: '#334155', text: '#0f172a', box: '#ffffff',
+    palette: ['#2563eb', '#dc2626', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#9333ea'] },
+  pastel: { name: 'พาสเทล', dark: false, bg: '#fffdf7', root: '#475569', text: '#1f2937', box: '#ffffff',
+    palette: ['#60a5fa', '#f87171', '#34d399', '#fbbf24', '#a78bfa', '#f472b6', '#22d3ee', '#a3e635', '#fb923c', '#818cf8'] },
+  vivid: { name: 'สดใส', dark: false, bg: '#ffffff', root: '#0f172a', text: '#0f172a', box: '#ffffff',
+    palette: ['#1d4ed8', '#e11d48', '#15803d', '#d97706', '#6d28d9', '#0e7490', '#c2410c', '#be185d', '#4d7c0f', '#4338ca'] },
+  mono: { name: 'ขาวดำ', dark: false, bg: '#ffffff', root: '#111827', text: '#111827', box: '#ffffff',
+    palette: ['#1f2937', '#4b5563', '#6b7280', '#374151', '#9ca3af', '#111827'] },
+  dark: { name: 'มืด', dark: true, bg: '#0f172a', root: '#e2e8f0', text: '#e2e8f0', box: '#1e293b',
+    palette: ['#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#c084fc', '#f472b6', '#22d3ee', '#a3e635', '#fb923c', '#818cf8'] },
+};
+
+let currentTheme = THEMES.classic;
+export let PALETTE = [...currentTheme.palette];
+export function setTheme(name) {
+  currentTheme = THEMES[name] || THEMES.classic;
+  PALETTE = [...currentTheme.palette];
+  return currentTheme;
+}
+export function getTheme() { return currentTheme; }
 
 export function paletteColor(i) {
   return PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length];

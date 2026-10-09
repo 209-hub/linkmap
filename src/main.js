@@ -1,12 +1,13 @@
 // ตัวประสานหลักของ LinkMap: สถานะ คำสั่ง คีย์ลัด เมนู autosave
 import { Graph, History } from './graph.js';
 import { Renderer, NOTE_DEFAULT, GROUP_DEFAULT, nodeBox, linkGeometry } from './render.js';
-import { ENTITY_TYPES, TYPE_ORDER, typeInfo, paletteColor, heatColor } from './types.js';
+import { ENTITY_TYPES, TYPE_ORDER, typeInfo, paletteColor, heatColor, THEMES, setTheme, getTheme } from './types.js';
 import { runLayout, buildTree } from './layout.js';
 import * as A from './analysis.js';
 import { sampleGraph } from './sample.js';
 import { exportNodesCSV, exportLinksCSV } from './csv.js';
-import { exportPNG, exportSVG, downloadText, safeFilename } from './export.js';
+import { exportImage, exportPDF, exportSVG, downloadText, safeFilename } from './export.js';
+import { IMAGE_MAX_W } from './render.js';
 import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, showTab } from './ui.js';
 import { toOutline, importOutline } from './outline.js';
 
@@ -223,6 +224,90 @@ app.deleteNodeKeepChildren = (id) => {
   if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
   if (p) app.select([p]);
 };
+// ---------------------------------------------------------------- ธีม รูปทรง ตัวหนา รูปภาพ แทรกตำแหน่งด้วยการลาก
+app.applyTheme = (name) => {
+  const t = setTheme(name);
+  app.graph.meta.theme = THEMES[name] ? name : 'classic';
+  document.body.classList.toggle('dark', !!t.dark);
+  document.querySelectorAll('.theme-chip').forEach(c => c.classList.toggle('active', c.dataset.theme === app.graph.meta.theme));
+  app.changed({ structural: true });
+};
+app.setTopicStyle = (patch, { wholeBranch = false } = {}) => {
+  let ids = [...app.selection].filter(id => app.graph.getNode(id)?.type === 'topic');
+  if (!ids.length) { app.toast('เลือกหัวข้อก่อน', true); return; }
+  if (wholeBranch) ids = [...new Set(ids.flatMap(id => [id, ...app.descendants(id)]))];
+  app.mutate(g => ids.forEach(id => g.updateNode(id, patch)));
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+};
+app.toggleStyle = (key) => {
+  const id = [...app.selection].find(i => app.graph.getNode(i)?.type === 'topic'); if (!id) return;
+  app.setTopicStyle({ [key]: !app.graph.getNode(id)[key] });
+};
+/** ย่อรูปแล้วใส่ในหัวข้อที่เลือก (รับ File/Blob) */
+app.setImageFromFile = async (file, targetId = null) => {
+  const id = targetId || [...app.selection].find(i => app.graph.getNode(i)?.type === 'topic');
+  if (!id) { app.toast('เลือกหัวข้อที่จะใส่รูปก่อน', true); return; }
+  if (!file || !file.type.startsWith('image/')) { app.toast('ไฟล์ไม่ใช่รูปภาพ', true); return; }
+  const bitmapUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('อ่านรูปไม่ได้')); im.src = bitmapUrl; });
+    const maxW = IMAGE_MAX_W * 2; // เก็บความละเอียด 2 เท่าของที่แสดง
+    const s = Math.min(1, maxW / img.naturalWidth);
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const isPhoto = file.type === 'image/jpeg';
+    const dataUrl = isPhoto ? c.toDataURL('image/jpeg', 0.85) : c.toDataURL('image/png');
+    app.mutate(g => g.updateNode(id, { image: dataUrl, imageW: c.width, imageH: c.height }));
+    if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+    app.toast('ใส่รูปแล้ว');
+  } catch (err) { app.toast(err.message, true); }
+  finally { URL.revokeObjectURL(bitmapUrl); }
+};
+app.removeImage = () => app.setTopicStyle({ image: null, imageW: 0, imageH: 0 });
+/** ปล่อยหัวข้อที่ลากใกล้พี่น้อง → แทรกตำแหน่ง/ย้ายไปกิ่งนั้นตามแนวตั้ง (คืน true ถ้าจัดการแล้ว) */
+app.dropInsert = (id, pt, snap) => {
+  const n = app.graph.getNode(id);
+  if (!n || n.type !== 'topic' || !app.opts.autoArrange) return false;
+  let nearest = null, best = 150;
+  for (const m of app.graph.entityNodes()) {
+    if (m.id === id || m.type !== 'topic' || app.isHidden(m.id) || app.isDescendant(m.id, id)) continue;
+    const box = nodeBox(m);
+    const dx = Math.max(0, Math.abs(pt.x - m.x) - box.w / 2), dy = Math.max(0, Math.abs(pt.y - m.y) - box.h / 2);
+    const d = Math.hypot(dx, dy);
+    if (d < best) { best = d; nearest = m; }
+  }
+  if (!nearest) return false;
+  const newParent = app.tree.parent.get(nearest.id);
+  if (!newParent) return false; // ใกล้รากเฉย ๆ → ไม่ทำอะไร (ปล่อยให้ย้ายตำแหน่งธรรมดา)
+  const oldParent = app.tree.parent.get(id);
+  app.history.pushSnapshot(snap);
+  const g = app.graph;
+  if (oldParent !== newParent) {
+    for (const l of g.linksOf(id)) if (l.to === id) g.removeLink(l.id);
+    g.addLink({ from: newParent, to: id, label: '', directed: false });
+  }
+  // เรียงพี่น้องตาม y ปัจจุบัน แล้วแทรกตัวที่ลากตาม y ที่ปล่อย
+  const sibs = (app.tree.children.get(newParent) || []).filter(s => s !== id).map(s => g.getNode(s)).sort((a, b) => a.y - b.y);
+  let idx = sibs.findIndex(s => pt.y < s.y);
+  if (idx < 0) idx = sibs.length;
+  sibs.splice(idx, 0, n);
+  sibs.forEach((s, k) => g.updateNode(s.id, { order: k }));
+  app.changed();
+  app.arrangeMindmap({ keepView: true });
+  app.select([id]);
+  app.toast(oldParent !== newParent ? `ย้ายไปใต้ “${g.getNode(newParent).label}” แล้ว` : 'จัดลำดับใหม่แล้ว');
+  return true;
+};
+document.addEventListener('paste', (e) => {
+  const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const items = [...(e.clipboardData?.items || [])];
+  const imgItem = items.find(i => i.type.startsWith('image/'));
+  if (imgItem) { e.preventDefault(); app.setImageFromFile(imgItem.getAsFile()); return; }
+  const text = e.clipboardData?.getData('text/plain');
+  if (text && text.includes('\n') && /^\s*([-*#]|\d+[.)])\s/m.test(text)) { e.preventDefault(); app.importOutlineText(text, { underSelected: true }); }
+});
+$('#file-image')?.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) app.setImageFromFile(f); e.target.value = ''; });
+
 app.setMark = (mark) => {
   const ids = [...app.selection].filter(id => app.graph.nodes.has(id));
   if (!ids.length) return;
@@ -491,6 +576,9 @@ app.toggleHideType = (type) => {
 app.run = async (cmd) => {
   const selNodes = () => [...app.selection].filter(id => app.graph.nodes.has(id));
   if (cmd.startsWith('layout:')) return app.applyLayout(cmd.slice(7));
+  if (cmd.startsWith('theme:')) return app.applyTheme(cmd.slice(6));
+  if (cmd.startsWith('shape:')) return app.setTopicStyle({ shape: cmd.slice(6) === 'auto' ? null : cmd.slice(6) });
+  if (cmd.startsWith('shape-branch:')) return app.setTopicStyle({ shape: cmd.slice(13) === 'auto' ? null : cmd.slice(13) }, { wholeBranch: true });
   if (cmd === 'layout-selected') return app.applyLayout('force', { onlySelected: true });
   if (cmd.startsWith('analysis:')) {
     const k = cmd.slice(9);
@@ -517,7 +605,7 @@ app.run = async (cmd) => {
     case 'export-nodes-csv': downloadText(safeFilename(app.graph.meta.title + '_nodes', 'csv'), exportNodesCSV(app.graph), 'text/csv;charset=utf-8'); break;
     case 'export-links-csv': downloadText(safeFilename(app.graph.meta.title + '_links', 'csv'), exportLinksCSV(app.graph), 'text/csv;charset=utf-8'); break;
     case 'export-png':
-      try { await exportPNG(app.renderer, safeFilename(app.graph.meta.title, 'png')); app.toast('ส่งออก PNG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
+      try { await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'png'), { format: 'png' }); app.toast('ส่งออก PNG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
     case 'export-svg':
       try { exportSVG(app.renderer, safeFilename(app.graph.meta.title, 'svg')); app.toast('ส่งออก SVG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
     case 'load-sample':
@@ -546,6 +634,18 @@ app.run = async (cmd) => {
     }
     case 'add-node': { const c = centerWorld(); app.createNodeAt(c.x, c.y); break; }
     case 'add-sibling': app.addTopic('sibling'); break;
+    case 'bold': app.toggleStyle('bold'); break;
+    case 'italic': app.toggleStyle('italic'); break;
+    case 'image-add': $('#file-image').click(); break;
+    case 'image-remove': app.removeImage(); break;
+    case 'export-jpeg':
+      try { await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'jpg'), { format: 'jpeg' }); app.toast('ส่งออก JPEG แล้ว'); } catch (err) { app.toast(err.message, true); } break;
+    case 'export-pdf': case 'export-pdf-a4': case 'export-pdf-a3':
+      try {
+        const page = cmd === 'export-pdf-a4' ? 'a4landscape' : cmd === 'export-pdf-a3' ? 'a3landscape' : 'fit';
+        await exportPDF(app.renderer, safeFilename(app.graph.meta.title, 'pdf'), { page, title: app.graph.meta.title });
+        app.toast('ส่งออก PDF แล้ว');
+      } catch (err) { app.toast(err.message, true); } break;
     case 'toggle-collapse': { const id = selNodes()[0]; if (id) app.toggleCollapse(id); break; }
     case 'expand-all': app.mutate(g => { for (const n of g.nodes.values()) if (n.collapsed) g.updateNode(n.id, { collapsed: false }); }); if (app.opts.autoArrange) app.arrangeMindmap(); break;
     case 'delete-branch': { const ids = selNodes(); if (ids.length) app.deleteBranch(ids); break; }
@@ -618,6 +718,9 @@ function loadGraph(g, { view = null, hidden = [] } = {}) {
   app.graph = g; app.history = new History(100); app.selection.clear(); app.hidden = new Set(hidden);
   app.analysis = null; app.visual = {};
   $('#doc-title').value = g.meta.title || 'ผังใหม่';
+  const t = setTheme(g.meta.theme || 'classic'); g.meta.theme = g.meta.theme || 'classic';
+  document.body.classList.toggle('dark', !!t.dark);
+  document.querySelectorAll('.theme-chip').forEach(c => c.classList.toggle('active', c.dataset.theme === g.meta.theme));
   app.changed();
   if (view) { app.view = view; app.renderer.applyView(); } else app.renderer.fit();
 }
@@ -684,6 +787,13 @@ function initMenus() {
   $('#opt-grid').addEventListener('change', (e) => { app.opts.grid = e.target.checked; app.renderer.applyView(); });
   $('#opt-snap').addEventListener('change', (e) => { app.opts.snap = e.target.checked; });
   $('#opt-auto-arrange').addEventListener('change', (e) => { app.opts.autoArrange = e.target.checked; });
+  const themeRow = $('#theme-row');
+  for (const [key, t] of Object.entries(THEMES)) {
+    const b = document.createElement('button'); b.className = 'theme-chip'; b.dataset.theme = key; b.title = t.name;
+    b.style.background = `linear-gradient(135deg, ${t.palette[0]} 0 50%, ${t.palette[1]} 50% 100%)`; b.style.boxShadow = `inset 0 0 0 3px ${t.bg}`;
+    b.addEventListener('click', (e) => { e.stopPropagation(); app.applyTheme(key); });
+    themeRow.appendChild(b);
+  }
   $('#btn-undo').addEventListener('click', () => app.run('undo'));
   $('#btn-redo').addEventListener('click', () => app.run('redo'));
   $('#zoom-label').addEventListener('click', () => app.renderer.fit());
@@ -752,7 +862,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { app.spaceDown = true; $('#canvas').classList.add('tool-pan'); e.preventDefault(); return; }
   if (ctrl) {
     const k = e.key.toLowerCase();
-    const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png' };
+    const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png', b: 'bold', i: 'italic', p: 'export-pdf' };
     if (k === 'f') { e.preventDefault(); $('#search').focus(); return; }
     if (k === 'm') { e.preventDefault(); app.run(e.shiftKey ? 'copy-outline' : 'import-outline'); return; }
     if (k === '/') { e.preventDefault(); app.run('toggle-collapse'); return; }

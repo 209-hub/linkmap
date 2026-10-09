@@ -13,6 +13,9 @@ export const DEFAULT_NODE = {
   mark: '',         // เครื่องหมายเน้น เช่น ⭐ ❗ ✅
   collapsed: false, // ยุบกิ่ง (ซ่อนลูกหลาน)
   order: null,      // ลำดับในหมู่พี่น้อง (null = ตามลำดับสร้าง)
+  shape: null,      // รูปทรงหัวข้อ: rounded | rect | pill | underline (null = ตามระดับ)
+  bold: false, italic: false,
+  image: null, imageW: 0, imageH: 0, // รูปภาพ (data URL) ในหัวข้อ
 };
 
 export const DEFAULT_LINK = {
