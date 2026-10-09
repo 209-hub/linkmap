@@ -115,6 +115,7 @@ app.setPanel = (show) => {
   app.opts.panel = !!show; app.saveOpts();
   $('#workspace').classList.toggle('panel-hidden', !app.opts.panel);
   $('#btn-panel').classList.toggle('on', app.opts.panel);
+  $('#tb-panel').classList.toggle('active', app.opts.panel);
   if (app.opts.panel) refreshPanels(app);
   app.renderer?.applyView();
 };
@@ -416,16 +417,19 @@ app.editInline = (id, isNew = false) => {
   editor.style.left = (pos.x - width / 2) + 'px'; editor.style.top = (pos.y - 14) + 'px';
   editor.placeholder = l ? 'ป้ายกำกับเส้น' : 'ชื่อ';
   editor.classList.remove('hidden');
-  editor.focus(); editor.select();
+  const focusIt = () => { if (!editor.classList.contains('hidden')) { editor.focus({ preventScroll: true }); editor.select(); } };
+  focusIt(); setTimeout(focusIt, 0); setTimeout(focusIt, 60); // เผื่อเบราว์เซอร์ย้ายโฟกัสหลังคลิก/แตะ
 };
-app.closeInlineEditor = (commit) => {
+app.closeInlineEditor = (commit, { reason = 'commit' } = {}) => {
   if (editor.classList.contains('hidden')) return;
   const id = editor.dataset.id; const val = editor.value;
   editor.classList.add('hidden');
   if (!commit) return;
   const n = app.graph.getNode(id), l = app.graph.getLink(id);
   const isNew = editor.dataset.isNew === '1';
-  if (n && isNew && !val.trim() && n.type === 'topic') { // หัวข้อใหม่ที่ไม่ได้พิมพ์อะไร → เอาออก
+  if (n && isNew && !val.trim() && n.type === 'topic') {
+    // หัวข้อใหม่ที่ยังว่าง: ถ้าผู้ใช้กด Enter/Esc เอง → เอาออก; ถ้าโฟกัสหลุดเอง (แตะที่อื่น/เบราว์เซอร์ย้ายโฟกัส) → ใส่ชื่อเริ่มต้นไว้ก่อน
+    if (reason === 'blur') { app.mutate(g => g.updateNode(id, { label: 'หัวข้อใหม่' })); return; }
     app.mutate(g => g.removeNode(id)); return;
   }
   if (n && n.label !== val && (val.trim() || n.type === 'note')) app.mutate(g => g.updateNode(id, { label: val }));
@@ -452,7 +456,7 @@ editor.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') { app.closeInlineEditor(false); $('#canvas').focus(); }
 });
-editor.addEventListener('blur', () => app.closeInlineEditor(true));
+editor.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== editor) app.closeInlineEditor(true, { reason: 'blur' }); }, 0));
 
 // ---------------------------------------------------------------- เมนูคลิกขวา
 const cmenu = $('#context-menu');
@@ -848,6 +852,7 @@ function initMenus() {
   $('#opt-auto-arrange').addEventListener('change', (e) => app.setAutoArrange(e.target.checked));
   $('#tb-auto-arrange').addEventListener('change', (e) => { app.setAutoArrange(e.target.checked); app.toast(e.target.checked ? 'เปิดจัดผังอัตโนมัติ: จัดใหม่ทุกครั้งที่เพิ่มหัวข้อ' : 'ปิดจัดผังอัตโนมัติ: หัวข้อใหม่จะวางข้างพ่อโดยไม่ขยับของเดิม (กดปุ่ม "จัดผัง" เมื่อต้องการ)'); });
   $('#btn-panel').addEventListener('click', () => app.setPanel(!app.opts.panel));
+  $('#tb-panel').addEventListener('click', () => app.setPanel(!app.opts.panel));
   document.querySelectorAll('#toolbar .tool-action').forEach(b => b.addEventListener('click', () => app.run(b.dataset.cmd)));
   const themeRow = $('#theme-row');
   for (const [key, t] of Object.entries(THEMES)) {
@@ -982,3 +987,6 @@ function boot() {
   window.addEventListener('beforeunload', () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] })); } catch { /* ignore */ } });
 }
 boot();
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { /* ไม่รองรับ/ไม่จำเป็น */ }));
+}

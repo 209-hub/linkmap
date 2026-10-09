@@ -572,6 +572,7 @@ export class Renderer {
     if (e.button === 0 && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
       this._lastDown = null;
       this._dblHandled = now;
+      e.preventDefault(); // กันเบราว์เซอร์ย้ายโฟกัสไปจากช่องพิมพ์ที่กำลังจะเปิด
       this._handleDouble(hit, w);
       return;
     }
@@ -610,7 +611,7 @@ export class Renderer {
     }
     // โหนด
     if (hit.collapse) { this.app.toggleCollapse(hit.id); return; }
-    if (hit.add) { this.app.select([hit.id]); this.app.addTopic('child'); return; }
+    if (hit.add) { e.preventDefault(); this.app.select([hit.id]); this.app.addTopic('child'); return; }
     if (hit.port || e.altKey) { this._startLinkDrag(hit.id, e); return; }
     if (hit.handle) {
       const n = this.app.graph.getNode(hit.id); const box = nodeBox(n);
