@@ -338,6 +338,25 @@ function renderLegend(app) {
   pane.querySelectorAll('[data-comm]').forEach(d => d.addEventListener('click', () => app.select(an.groups[Number(d.dataset.comm)])));
 }
 
+// ---------------------------------------------------------------- AI dialog
+export function openAiDialog(app, { prefill = '' } = {}) {
+  const dlg = document.getElementById('dlg-ai');
+  const prompt = dlg.querySelector('#ai-prompt');
+  if (!prompt.value) prompt.value = app.aiPrompt();
+  const res = dlg.querySelector('#ai-result');
+  if (prefill) res.value = prefill;
+  const sel = [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic');
+  const chk = dlg.querySelector('#ai-under');
+  chk.disabled = !sel; chk.checked = !!sel;
+  dlg.querySelector('#ai-under-label').textContent = sel ? `ต่อใต้หัวข้อ “${app.graph.getNode(sel).label}”` : 'ต่อใต้หัวข้อที่เลือก (ยังไม่ได้เลือก → สร้างเป็นผังใหม่/ต้นใหม่)';
+  dlg.querySelectorAll('[data-cmd]').forEach(b => { b.onclick = () => app.run(b.dataset.cmd); });
+  dlg.querySelector('#ai-copy-only').onclick = () => app.copyAiPrompt();
+  dlg.querySelector('#ai-pick-file').onclick = () => { const f = document.getElementById('file-ai'); f.value = ''; f.click(); };
+  dlg.querySelector('#ai-cancel').onclick = () => dlg.close();
+  dlg.querySelector('#ai-import').onclick = () => { const t = res.value; if (!t.trim()) { app.toast('ยังไม่ได้วางคำตอบของเอไอ', true); return; } if (app.importAiText(t, { underSelected: chk.checked })) { res.value = ''; dlg.close(); } };
+  dlg.showModal();
+}
+
 // ---------------------------------------------------------------- Outline dialog
 export function openOutlineDialog(app) {
   const dlg = document.getElementById('dlg-outline');

@@ -8,8 +8,8 @@ import { sampleGraph } from './sample.js';
 import { exportNodesCSV, exportLinksCSV } from './csv.js';
 import { exportImage, exportPDF, exportSVG, downloadText, safeFilename } from './export.js';
 import { IMAGE_MAX_W } from './render.js';
-import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, showTab } from './ui.js';
-import { toOutline, importOutline } from './outline.js';
+import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, openAiDialog, showTab } from './ui.js';
+import { toOutline, importOutline, importTree, extractJSON, AI_PROMPT } from './outline.js';
 
 const STORAGE_KEY = 'linkmap.doc.v1';
 const $ = (s) => document.querySelector(s);
@@ -365,7 +365,9 @@ document.addEventListener('paste', (e) => {
   const imgItem = items.find(i => i.type.startsWith('image/'));
   if (imgItem) { e.preventDefault(); app.setImageFromFile(imgItem.getAsFile()); return; }
   const text = e.clipboardData?.getData('text/plain');
-  if (text && text.includes('\n') && /^\s*([-*#]|\d+[.)])\s/m.test(text)) { e.preventDefault(); app.importOutlineText(text, { underSelected: true }); }
+  if (!text) return;
+  if (/^\s*(```|\{|\[)/.test(text) && extractJSON(text)) { e.preventDefault(); app.importAiText(text, { underSelected: true }); return; }
+  if (text.includes('\n') && /^\s*([-*#]|\d+[.)])\s/m.test(text)) { e.preventDefault(); app.importOutlineText(text, { underSelected: true }); }
 });
 $('#file-image')?.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) app.setImageFromFile(f); e.target.value = ''; });
 
@@ -641,6 +643,10 @@ app.run = async (cmd) => {
   const selNodes = () => [...app.selection].filter(id => app.graph.nodes.has(id));
   if (cmd.startsWith('layout:')) return app.applyLayout(cmd.slice(7));
   if (cmd.startsWith('theme:')) return app.applyTheme(cmd.slice(6));
+  if (cmd === 'ai:dialog') return openAiDialog(app);
+  if (cmd === 'ai:paste') return openAiDialog(app);
+  if (cmd === 'ai:file') { $('#file-ai').value = ''; $('#file-ai').click(); return; }
+  if (cmd === 'ai:gemini' || cmd === 'ai:chatgpt' || cmd === 'ai:claude') return app.openAiSite(cmd.slice(3));
   if (cmd.startsWith('shape:')) return app.setTopicStyle({ shape: cmd.slice(6) === 'auto' ? null : cmd.slice(6) });
   if (cmd.startsWith('shape-branch:')) return app.setTopicStyle({ shape: cmd.slice(13) === 'auto' ? null : cmd.slice(13) }, { wholeBranch: true });
   if (cmd === 'layout-selected') return app.applyLayout('force', { onlySelected: true });
@@ -760,6 +766,49 @@ app.run = async (cmd) => {
     default: console.warn('ไม่รู้จักคำสั่ง', cmd);
   }
 };
+// ---------------------------------------------------------------- เอไอ (ผ่านเว็บของผู้ให้บริการ ไม่ใช้ API)
+const AI_SITES = { gemini: 'https://gemini.google.com/app', chatgpt: 'https://chatgpt.com/', claude: 'https://claude.ai/new' };
+app.aiPrompt = () => { const t = $('#ai-prompt'); return (t && t.value.trim()) || AI_PROMPT; };
+app.copyAiPrompt = async () => {
+  try { await navigator.clipboard.writeText(app.aiPrompt()); app.toast('คัดลอกคำสั่งแล้ว — ไปวางในช่องแชทของเอไอ (Ctrl+V) แล้วแนบ PDF'); return true; }
+  catch { app.toast('คัดลอกอัตโนมัติไม่ได้ เปิด "ดู/แก้คำสั่ง" แล้วคัดลอกเอง', true); return false; }
+};
+app.openAiSite = async (site) => {
+  await app.copyAiPrompt();
+  const w = window.open(AI_SITES[site], '_blank', 'noopener');
+  if (!w) app.toast('เบราว์เซอร์บล็อกการเปิดแท็บใหม่ — เปิด ' + AI_SITES[site] + ' เอง', true);
+};
+/** นำคำตอบของเอไอเข้า: JSON ต้นไม้ / ไฟล์ LinkMap / โครงร่างข้อความ  คืน true เมื่อสำเร็จ */
+app.importAiText = (text, { underSelected = false } = {}) => {
+  const parentId = underSelected ? [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic') : null;
+  const obj = extractJSON(text);
+  if (obj && obj.format === 'linkmap' && Array.isArray(obj.nodes)) {
+    try { loadGraph(Graph.fromJSON(obj), { view: obj.view, hidden: obj.hidden || [] }); app.toast('เปิดไฟล์ LinkMap แล้ว'); return true; }
+    catch (err) { app.toast('ไฟล์ LinkMap ไม่ถูกต้อง: ' + err.message, true); return false; }
+  }
+  let ids = [];
+  if (obj) {
+    app.mutate(g => { ids = importTree(g, obj, { parentId: parentId || null }); });
+    if (!ids.length) { app.toast('อ่าน JSON ได้ แต่ไม่พบโครงหัวข้อ (ต้องมี text/children)', true); return false; }
+    if (obj.title && !parentId && app.graph.meta.title === 'ผังใหม่') { app.graph.meta.title = String(obj.title); $('#doc-title').value = app.graph.meta.title; }
+  } else {
+    app.mutate(g => { ids = importOutline(g, text, { parentId: parentId || null }); });
+    if (!ids.length) { app.toast('ไม่พบหัวข้อในข้อความ — ต้องเป็น JSON หรือรายการแบบ - ข้อ', true); return false; }
+  }
+  app.history.push(app.graph);
+  app.arrangeMindmap({ keepView: !!parentId });
+  app.select([ids[0]]);
+  if (!parentId) app.renderer.fit();
+  app.toast(`สร้างมายแมปจากเอไอแล้ว ${ids.length} หัวข้อ`);
+  return true;
+};
+$('#file-ai')?.addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const text = await f.text();
+  const under = $('#dlg-ai')?.open ? $('#ai-under').checked : false;
+  if (app.importAiText(text, { underSelected: under })) $('#dlg-ai')?.close();
+  e.target.value = '';
+});
 app.importOutlineText = (text, { underSelected = false } = {}) => {
   const parentId = underSelected ? [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic') : null;
   let ids = [];
@@ -936,6 +985,7 @@ window.addEventListener('keydown', (e) => {
     const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png', b: 'bold', i: 'italic', p: 'export-pdf' };
     if (k === 'f') { e.preventDefault(); $('#search').focus(); return; }
     if (k === 'm') { e.preventDefault(); app.run(e.shiftKey ? 'copy-outline' : 'import-outline'); return; }
+    if (k === 'j') { e.preventDefault(); app.run('ai:dialog'); return; }
     if (k === '/') { e.preventDefault(); app.run('toggle-collapse'); return; }
     if (map[k]) { e.preventDefault(); app.run(map[k]); }
     return;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOutline, importOutline, toOutline } from '../src/outline.js';
+import { parseOutline, importOutline, toOutline, extractJSON, normalizeTree, importTree } from '../src/outline.js';
 import { Graph } from '../src/graph.js';
 import { sampleGraph } from '../src/sample.js';
 
@@ -43,4 +43,31 @@ test('เครื่องหมายเน้น (mark) ไปกลับไ
   const n = [...g.nodes.values()][1];
   assert.equal(n.mark, '⭐'); assert.equal(n.label, 'สำคัญ');
   assert.ok(toOutline(g).includes('- ⭐ สำคัญ'));
+});
+
+test('extractJSON: ดึง JSON จากบล็อกโค้ดและข้อความปน', () => {
+  const fenced = ['นี่คือผล:', '```json', '{"a":1}', '```', 'จบ'].join(String.fromCharCode(10));
+  assert.deepEqual(extractJSON(fenced), { a: 1 });
+  assert.deepEqual(extractJSON('ผลลัพธ์ {"a":[1,2]} ครับ'), { a: [1, 2] });
+  assert.equal(extractJSON('ไม่มีอะไร'), null);
+});
+
+test('normalizeTree รองรับหลายรูปแบบที่เอไอชอบตอบ', () => {
+  const a = normalizeTree({ title: 'วิชา', root: { text: 'ราก', children: [{ text: 'ก', notes: 'n', children: [] }] } });
+  assert.equal(a.text, 'ราก'); assert.equal(a.children[0].notes, 'n');
+  const b = normalizeTree({ name: 'ราก', subtopics: ['x', { label: 'y', items: ['z'] }] });
+  assert.deepEqual(b.children.map(c => c.text), ['x', 'y']); assert.equal(b.children[1].children[0].text, 'z');
+  const c = normalizeTree({ 'บทที่ 1': ['ก', 'ข'] });
+  assert.equal(c.text, 'บทที่ 1'); assert.equal(c.children.length, 2);
+});
+
+test('importTree สร้างมายแมปจาก JSON และต่อใต้หัวข้อที่เลือกได้', () => {
+  const g = new Graph();
+  const ids = importTree(g, { root: { text: 'ราก', children: [{ text: 'ก', children: [{ text: 'ก1' }] }, { text: 'ข' }] } });
+  assert.equal(ids.length, 4);
+  assert.equal(g.size.links, 3);
+  const parents = (id) => [...g.links.values()].filter(l => l.to === id).map(l => l.from);
+  assert.deepEqual(parents(ids[2]), [ids[1]]);
+  const more = importTree(g, { text: 'ค', children: [] }, { parentId: ids[3] });
+  assert.deepEqual(parents(more[0]), [ids[3]]);
 });

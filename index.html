@@ -111,6 +111,18 @@
           <button data-cmd="analysis:clear">ล้างผลวิเคราะห์บนผัง</button>
         </div>
       </div>
+      <div class="menu" data-menu="ai"><button class="menu-btn">✨ เอไอ</button>
+        <div class="menu-list">
+          <button data-cmd="ai:dialog">สรุปเอกสารเป็นมายแมปด้วยเอไอ… <kbd>Ctrl+J</kbd></button>
+          <hr>
+          <button data-cmd="ai:gemini">คัดลอกคำสั่ง + เปิด Gemini</button>
+          <button data-cmd="ai:chatgpt">คัดลอกคำสั่ง + เปิด ChatGPT</button>
+          <button data-cmd="ai:claude">คัดลอกคำสั่ง + เปิด Claude</button>
+          <hr>
+          <button data-cmd="ai:paste">วางผลลัพธ์จากเอไอ (JSON / โครงร่าง)…</button>
+          <button data-cmd="ai:file">เปิดไฟล์ที่ดาวน์โหลดจากเอไอ (.json/.md/.txt)…</button>
+        </div>
+      </div>
       <div class="menu" data-menu="view"><button class="menu-btn">มุมมอง</button>
         <div class="menu-list">
           <button data-cmd="expand">ขยายเพื่อนบ้านของที่เลือก <kbd>E</kbd></button>
@@ -216,6 +228,7 @@
 <input type="file" id="file-json" accept=".json,application/json" class="hidden">
 <input type="file" id="file-csv" accept=".csv,.txt,.tsv,text/csv" class="hidden">
 <input type="file" id="file-image" accept="image/*" class="hidden">
+<input type="file" id="file-ai" accept=".json,.md,.txt,application/json,text/markdown,text/plain" class="hidden">
 
 <!-- กล่องโต้ตอบนำเข้า CSV -->
 <dialog id="dlg-csv">
@@ -243,6 +256,31 @@
       <button type="button" class="btn primary" id="csv-import">นำเข้า</button>
     </div>
   </form>
+</dialog>
+
+<!-- เอไอ -->
+<dialog id="dlg-ai">
+  <div class="dialog-body">
+    <h2>✨ สรุปเอกสารเป็นมายแมปด้วยเอไอ</h2>
+    <p class="muted">ไม่ต้องใช้ API ไม่มีค่าใช้จ่าย: แอปจะเตรียมคำสั่งให้ คุณนำไปวางใน Gemini / ChatGPT / Claude พร้อมแนบ PDF หรือข้อความ แล้วนำคำตอบกลับมาวางที่นี่ แอปจะสร้างมายแมปให้ทันที</p>
+    <h3>ขั้นที่ 1 — คัดลอกคำสั่งแล้วเปิดเอไอ (แนบ PDF/สไลด์/ข้อความในหน้านั้น)</h3>
+    <div class="row">
+      <button type="button" class="btn primary" data-cmd="ai:gemini">คัดลอก + เปิด Gemini</button>
+      <button type="button" class="btn" data-cmd="ai:chatgpt">คัดลอก + เปิด ChatGPT</button>
+      <button type="button" class="btn" data-cmd="ai:claude">คัดลอก + เปิด Claude</button>
+      <button type="button" class="btn" id="ai-copy-only">คัดลอกคำสั่งอย่างเดียว</button>
+    </div>
+    <details><summary class="muted" style="cursor:pointer">ดู/แก้คำสั่งที่จะส่งให้เอไอ</summary><textarea id="ai-prompt" rows="8"></textarea></details>
+    <h3>ขั้นที่ 2 — วางคำตอบของเอไอ (JSON หรือโครงร่างแบบ - ข้อ) หรือเปิดไฟล์ที่ดาวน์โหลดมา</h3>
+    <textarea id="ai-result" rows="8" placeholder='วางคำตอบที่นี่ เช่น {"title": "...", "root": {"text": "...", "children": [...]}} หรือ&#10;# หัวข้อ&#10;- ข้อ 1&#10;  - ข้อย่อย'></textarea>
+    <div class="row">
+      <button type="button" class="btn" id="ai-pick-file">เปิดไฟล์…</button>
+      <label><input type="checkbox" id="ai-under"> <span id="ai-under-label">ต่อใต้หัวข้อที่เลือก</span></label>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="ai-cancel">ปิด</button>
+      <button type="button" class="btn primary" id="ai-import">สร้างมายแมป</button>
+    </div>
+  </div>
 </dialog>
 
 <!-- กล่องยืนยัน -->
@@ -288,6 +326,7 @@
         <h3>คีย์ลัด</h3>
         <ul>
           <li><b>โหมดจดเรียน:</b> <kbd>Enter</kbd> หัวข้อถัดไป (พี่น้อง) · <kbd>Tab</kbd> หัวข้อย่อย · พิมพ์ตัวอักษรบนหัวข้อที่เลือกเพื่อแก้ทันที · <kbd>Ctrl+L</kbd> จัดผังมายแมป</li>
+          <li><b>✨ เอไอ:</b> <kbd>Ctrl+J</kbd> สรุปเอกสารเป็นมายแมป — แอปคัดลอกคำสั่งให้ คุณวางใน Gemini/ChatGPT/Claude พร้อมแนบ PDF แล้วนำคำตอบ (JSON หรือโครงร่าง) มาวางกลับ ไม่ต้องใช้ API</li>
           <li><b>ตกแต่ง:</b> <kbd>Ctrl+B</kbd> ตัวหนา · <kbd>Ctrl+I</kbd> ตัวเอียง · <kbd>Ctrl+V</kbd> วางรูปลงหัวข้อ (หรือวางข้อความแบบรายการเพื่อสร้างกิ่ง) · ธีมสี/ธีมมืดที่เมนูมุมมอง · <kbd>Ctrl+P</kbd> ส่งออก PDF</li>
           <li><b>มายแมป:</b> <kbd>←↑↓→</kbd> เดินไปหัวข้อข้างเคียง · <kbd>/</kbd> ยุบ/ขยายกิ่ง · <kbd>Ctrl+↑/↓</kbd> สลับลำดับ · <kbd>Delete</kbd> ลบทั้งกิ่ง · <kbd>Shift+Del</kbd> ลบเฉพาะหัวข้อ · <kbd>Home</kbd> ไปหัวข้อหลัก · ลากหัวข้อไปวางบนหัวข้ออื่น = ย้ายกิ่ง · <kbd>Ctrl+M</kbd> นำเข้าโครงร่างข้อความ</li>
           <li><kbd>Space</kbd> แตะ = สลับ เลือก ⇄ เลื่อน · กดค้างแล้วลาก = เลื่อนชั่วคราว</li>
