@@ -94,6 +94,10 @@ kbd { font: 11px/1 ui-monospace, Consolas, monospace; background: #f1f5f9; borde
 .node.topic .topic-text { text-anchor: middle; pointer-events: none; }
 .node.topic .sel-ring-rect { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; opacity: 0; pointer-events: none; }
 .node.topic.selected .sel-ring-rect { opacity: 1; }
+.collapse-btn { cursor: pointer; }
+.collapse-btn .collapse-bg { stroke-width: 1.5; }
+.collapse-btn .collapse-txt { font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.node .notes-ind { font-size: 10px; pointer-events: none; }
 .node.note .shape { fill: #fef08a; stroke: #eab308; stroke-width: 1; rx: 4; filter: url(#shadow); }
 .node.note .note-text { font-size: 13px; fill: #422006; pointer-events: none; }
 .group { cursor: move; }
@@ -154,6 +158,8 @@ kbd { font: 11px/1 ui-monospace, Consolas, monospace; background: #f1f5f9; borde
 .btn.small { padding: 3px 8px; font-size: 12px; }
 .btn.danger { color: var(--danger); border-color: #fecaca; }
 .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.mark-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.mark-row .btn { padding: 2px 7px; }
 .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 
 .data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }

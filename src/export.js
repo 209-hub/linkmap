@@ -10,6 +10,9 @@ const EXPORT_CSS = `
   .node .badge { font-size: 10px; font-weight: 700; text-anchor: middle; dominant-baseline: central; fill: #fff; }
   .node.dimmed, .link.dimmed, .group.dimmed { opacity: .15; }
   .node.topic .topic-text { text-anchor: middle; }
+  .collapse-btn .collapse-bg { stroke-width: 1.5; }
+  .collapse-btn .collapse-txt { font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  .node .notes-ind { font-size: 10px; }
   .node.note .shape { fill: #fef08a; stroke: #eab308; stroke-width: 1; rx: 4; }
   .node.note .note-text { font-size: 13px; fill: #422006; }
   .group .shape { fill: rgba(148, 163, 184, .10); stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 6 4; rx: 12; }

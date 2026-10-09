@@ -7,7 +7,8 @@ import * as A from './analysis.js';
 import { sampleGraph } from './sample.js';
 import { exportNodesCSV, exportLinksCSV } from './csv.js';
 import { exportPNG, exportSVG, downloadText, safeFilename } from './export.js';
-import { initPanels, refreshPanels, openCsvDialog, showTab } from './ui.js';
+import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, showTab } from './ui.js';
+import { toOutline, importOutline } from './outline.js';
 
 const STORAGE_KEY = 'linkmap.doc.v1';
 const $ = (s) => document.querySelector(s);
@@ -25,7 +26,17 @@ const app = {
   analysis: null,
   spaceDown: false,
   renderer: null,
+  collapsedHidden: new Set(),
+  tree: { roots: [], children: new Map(), parent: new Map() },
 };
+app.isHidden = (id) => app.hidden.has(id) || app.collapsedHidden.has(id);
+app.isDescendant = (id, ancestorId) => { // id อยู่ใต้ ancestorId หรือไม่
+  let cur = app.tree.parent.get(id);
+  while (cur) { if (cur === ancestorId) return true; cur = app.tree.parent.get(cur); }
+  return false;
+};
+app.descendantCount = (id) => { let c = 0; const st = [...(app.tree.children.get(id) || [])]; while (st.length) { const x = st.pop(); c++; st.push(...(app.tree.children.get(x) || [])); } return c; };
+app.descendants = (id) => { const out = []; const st = [...(app.tree.children.get(id) || [])]; while (st.length) { const x = st.pop(); out.push(x); st.push(...(app.tree.children.get(x) || [])); } return out; };
 window.linkmap = app; // สำหรับดีบัก
 
 // ---------------------------------------------------------------- สถานะ/การเปลี่ยนแปลง
@@ -49,8 +60,10 @@ app.changed = ({ structural = true } = {}) => {
 app.computeTree = () => {
   const nodes = app.graph.entityNodes();
   const links = [...app.graph.links.values()];
-  const { roots, children } = buildTree(nodes, links);
-  app.tree = { roots, children };
+  const { roots, children, parent } = buildTree(nodes, links);
+  app.tree = { roots, children, parent };
+  app.collapsedHidden = new Set();
+  for (const n of nodes) if (n.collapsed) for (const d of app.descendants(n.id)) app.collapsedHidden.add(d);
   for (const r of roots) {
     const rn = app.graph.getNode(r); rn.level = 0; rn.branchColor = null;
     children.get(r).forEach((c, i) => {
@@ -123,9 +136,9 @@ app.addTopic = (relation = 'child') => {
   app.editInline(node.id, true);
 };
 app.arrangeMindmap = ({ keepView = false } = {}) => {
-  const nodes = app.graph.entityNodes().filter(n => !app.hidden.has(n.id));
-  if (!nodes.length) return;
   app.computeTree();
+  const nodes = app.graph.entityNodes().filter(n => !app.isHidden(n.id));
+  if (!nodes.length) return;
   const roots = app.tree?.roots || [];
   const selRoot = [...app.selection].find(id => roots.includes(id));
   const pos = runLayout('mindmap', nodes, [...app.graph.links.values()], { rootId: selRoot || roots[0] || null, sizeFn: (n) => nodeBox(n) || { w: 60, h: 44 } });
@@ -162,6 +175,78 @@ app.createLink = (from, to) => {
   app.mutate(g => { link = g.addLink({ from, to, label: '' }); });
   app.select([link.id]);
   app.editInline(link.id, true);
+};
+
+// ---------------------------------------------------------------- ฟังก์ชันมายแมป: ยุบ/ขยาย ย้ายกิ่ง เรียงลำดับ เดินด้วยลูกศร
+app.toggleCollapse = (id) => {
+  const n = app.graph.getNode(id); if (!n) return;
+  if (!n.collapsed && !(app.tree.children.get(id) || []).length) return;
+  app.mutate(g => g.updateNode(id, { collapsed: !n.collapsed }));
+  for (const d of app.descendants(id)) app.selection.delete(d);
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+  app.select([id]);
+};
+app.reparent = (id, newParentId) => {
+  if (!id || !newParentId || id === newParentId || app.isDescendant(newParentId, id)) return;
+  const g = app.graph;
+  for (const l of g.linksOf(id)) if (l.to === id || (l.from === id && l.to === app.tree.parent.get(id))) g.removeLink(l.id);
+  g.addLink({ from: newParentId, to: id, label: '', directed: false });
+  g.updateNode(id, { order: null });
+  app.changed();
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+  app.select([id]);
+  app.toast(`ย้ายกิ่ง “${g.getNode(id).label}” ไปใต้ “${g.getNode(newParentId).label}” แล้ว`);
+};
+app.moveSibling = (id, delta) => {
+  const p = app.tree.parent.get(id); if (!p) return;
+  const sibs = [...app.tree.children.get(p)];
+  const i = sibs.indexOf(id); const j = i + delta;
+  if (i < 0 || j < 0 || j >= sibs.length) return;
+  [sibs[i], sibs[j]] = [sibs[j], sibs[i]];
+  app.mutate(g => sibs.forEach((sid, k) => g.updateNode(sid, { order: k })));
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+  app.select([id]);
+};
+app.deleteBranch = (ids) => {
+  const all = new Set();
+  for (const id of ids) { all.add(id); for (const d of app.descendants(id)) all.add(d); }
+  app.mutate(g => { for (const id of all) g.removeNode(id); });
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+  app.toast(`ลบ ${all.size} หัวข้อ`);
+};
+app.deleteNodeKeepChildren = (id) => {
+  const p = app.tree.parent.get(id); const kids = app.tree.children.get(id) || [];
+  app.mutate(g => {
+    if (p) for (const k of kids) g.addLink({ from: p, to: k, label: '', directed: false });
+    g.removeNode(id);
+  });
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+  if (p) app.select([p]);
+};
+app.setMark = (mark) => {
+  const ids = [...app.selection].filter(id => app.graph.nodes.has(id));
+  if (!ids.length) return;
+  app.mutate(g => ids.forEach(id => g.updateNode(id, { mark })));
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+};
+/** เดินในผังด้วยลูกศร: เลือกโหนดข้างเคียง (พ่อ/ลูก/พี่น้อง) ที่อยู่ในทิศนั้นมากที่สุด */
+app.navigate = (dir) => {
+  const cur = [...app.selection].find(id => app.graph.nodes.has(id));
+  if (!cur) { const r = app.tree.roots[0]; if (r) { app.select([r]); app.revealIfOffscreen(r); } return; }
+  const n = app.graph.getNode(cur);
+  const vec = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[dir];
+  const cands = new Set(app.tree.children.get(cur) || []);
+  const p = app.tree.parent.get(cur); if (p) { cands.add(p); for (const s of app.tree.children.get(p) || []) if (s !== cur) cands.add(s); }
+  let best = null, bestScore = -Infinity;
+  for (const id of cands) {
+    if (app.isHidden(id)) continue;
+    const m = app.graph.getNode(id); const dx = m.x - n.x, dy = m.y - n.y; const d = Math.hypot(dx, dy) || 1;
+    const cos = (dx * vec[0] + dy * vec[1]) / d;
+    if (cos < 0.3) continue;
+    const score = cos * 2 - d / 600;
+    if (score > bestScore) { bestScore = score; best = id; }
+  }
+  if (best) { app.select([best]); app.revealIfOffscreen(best); }
 };
 
 // ---------------------------------------------------------------- แก้ข้อความในที่
@@ -290,7 +375,7 @@ document.addEventListener('pointerdown', (e) => { if (!cmenu.contains(e.target))
 
 // ---------------------------------------------------------------- เลย์เอาต์
 function layoutTargets(onlySelected) {
-  const all = app.graph.entityNodes().filter(n => !app.hidden.has(n.id));
+  const all = app.graph.entityNodes().filter(n => !app.isHidden(n.id));
   if (onlySelected) {
     const sel = all.filter(n => app.selection.has(n.id));
     if (sel.length >= 2) return { nodes: sel, subset: true };
@@ -336,7 +421,7 @@ app.layoutNewNodes = (newIds) => {
 
 // ---------------------------------------------------------------- วิเคราะห์
 function visibleAdj() {
-  const ids = app.graph.entityNodes().filter(n => !app.hidden.has(n.id)).map(n => n.id);
+  const ids = app.graph.entityNodes().filter(n => !app.isHidden(n.id)).map(n => n.id);
   return app.graph.adjacency({ ids });
 }
 app.clearAnalysis = () => { app.analysis = null; app.visual = {}; app.renderer.render(); refreshPanels(app); };
@@ -440,11 +525,14 @@ app.run = async (cmd) => {
       loadSample(); break;
     case 'undo': { const g = app.history.undo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
     case 'redo': { const g = app.history.redo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
-    case 'select-all': app.select([...app.graph.nodes.keys()].filter(id => !app.hidden.has(id))); break;
+    case 'select-all': app.select([...app.graph.nodes.keys()].filter(id => !app.isHidden(id))); break;
     case 'delete': {
       if (!app.selection.size) return;
       const ids = [...app.selection];
+      const topicWithKids = ids.filter(id => app.graph.getNode(id)?.type === 'topic' && (app.tree.children.get(id) || []).length);
+      if (topicWithKids.length && ids.every(id => app.graph.nodes.has(id))) { app.deleteBranch(ids); break; }
       app.mutate(g => { for (const id of ids) { if (!g.removeNode(id)) g.removeLink(id); } });
+      if (app.opts.autoArrange && ids.some(id => !app.graph.nodes.has(id))) app.arrangeMindmap({ keepView: true });
       app.toast(`ลบ ${ids.length} รายการ`); break;
     }
     case 'duplicate': {
@@ -458,6 +546,20 @@ app.run = async (cmd) => {
     }
     case 'add-node': { const c = centerWorld(); app.createNodeAt(c.x, c.y); break; }
     case 'add-sibling': app.addTopic('sibling'); break;
+    case 'toggle-collapse': { const id = selNodes()[0]; if (id) app.toggleCollapse(id); break; }
+    case 'expand-all': app.mutate(g => { for (const n of g.nodes.values()) if (n.collapsed) g.updateNode(n.id, { collapsed: false }); }); if (app.opts.autoArrange) app.arrangeMindmap(); break;
+    case 'delete-branch': { const ids = selNodes(); if (ids.length) app.deleteBranch(ids); break; }
+    case 'delete-keep-children': { const id = selNodes()[0]; if (id) app.deleteNodeKeepChildren(id); break; }
+    case 'move-up': { const id = selNodes()[0]; if (id) app.moveSibling(id, -1); break; }
+    case 'move-down': { const id = selNodes()[0]; if (id) app.moveSibling(id, 1); break; }
+    case 'go-root': { const r = app.tree.roots[0]; if (r) { app.select([r]); app.renderer.centerOn(r); } break; }
+    case 'export-outline': downloadText(safeFilename(app.graph.meta.title, 'md'), toOutline(app.graph), 'text/markdown;charset=utf-8'); app.toast('ส่งออกโครงร่าง Markdown แล้ว'); break;
+    case 'copy-outline': {
+      const md = toOutline(app.graph);
+      try { await navigator.clipboard.writeText(md); app.toast('คัดลอกโครงร่างไปคลิปบอร์ดแล้ว'); } catch { downloadText(safeFilename(app.graph.meta.title, 'md'), md, 'text/markdown;charset=utf-8'); }
+      break;
+    }
+    case 'import-outline': openOutlineDialog(app); break;
     case 'add-child': app.addTopic('child'); break;
     case 'add-note': { const c = centerWorld(); app.createNote(c.x, c.y); break; }
     case 'add-group': app.createGroupAroundSelection(); break;
@@ -494,6 +596,16 @@ app.run = async (cmd) => {
     case 'help': $('#dlg-help').showModal(); break;
     default: console.warn('ไม่รู้จักคำสั่ง', cmd);
   }
+};
+app.importOutlineText = (text, { underSelected = false } = {}) => {
+  const parentId = underSelected ? [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic') : null;
+  let ids = [];
+  app.mutate(g => { ids = importOutline(g, text, { parentId: parentId || null }); });
+  if (!ids.length) { app.toast('ไม่พบหัวข้อในข้อความ', true); return; }
+  app.history.push(app.graph);
+  app.arrangeMindmap({ keepView: !!parentId });
+  app.select([ids[0]]);
+  app.toast(`นำเข้า ${ids.length} หัวข้อแล้ว`);
 };
 function centerWorld() {
   const r = $('#canvas').getBoundingClientRect();
@@ -642,11 +754,21 @@ window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png' };
     if (k === 'f') { e.preventDefault(); $('#search').focus(); return; }
+    if (k === 'm') { e.preventDefault(); app.run(e.shiftKey ? 'copy-outline' : 'import-outline'); return; }
+    if (k === '/') { e.preventDefault(); app.run('toggle-collapse'); return; }
     if (map[k]) { e.preventDefault(); app.run(map[k]); }
     return;
   }
   const key = e.key;
-  if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); app.run('delete'); return; }
+  if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); app.run(e.shiftKey ? 'delete-keep-children' : 'delete'); return; }
+  if (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown') {
+    e.preventDefault();
+    const dir = key.slice(5).toLowerCase();
+    if (ctrl && (dir === 'up' || dir === 'down')) { app.run(dir === 'up' ? 'move-up' : 'move-down'); return; }
+    app.navigate(dir); return;
+  }
+  if (key === 'Home') { app.run('go-root'); return; }
+  if (key === '/' || (ctrl && key === '/')) { e.preventDefault(); app.run('toggle-collapse'); return; }
   if (key === '?') { app.run('help'); return; }
   if (key === '\\') { app.run('toggle-panel'); return; }
   if (key === '+' || key === '=') { const r = $('#canvas').getBoundingClientRect(); app.renderer.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2); return; }

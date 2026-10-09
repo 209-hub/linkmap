@@ -108,6 +108,7 @@ function renderNodeInspector(app, pane, n) {
   pane.innerHTML = `
     <h2 class="panel-title"><span class="chip" style="background:${n.color || t.color}">${t.icon} ${t.label}</span><span class="muted" style="font-size:11px">${esc(n.id)}</span></h2>
     ${field(isBoxNode ? (n.type === 'note' ? 'ข้อความโน้ต' : 'ชื่อกรอบ') : 'ชื่อ', n.type === 'note' ? `<textarea rows="4" data-prop="label">${esc(n.label)}</textarea>` : `<input data-prop="label" value="${esc(n.label)}">`)}
+    ${n.type === 'topic' ? field('เครื่องหมายเน้น', `<div class="mark-row">${MARKS.map(m => `<button class="btn small ${n.mark === m ? 'primary' : ''}" data-mark="${m}">${m || 'ไม่มี'}</button>`).join('')}</div>`) : ''}
     ${isBoxNode ? '' : field('ประเภท', `<select data-prop="type">${typeOptions(n.type)}</select>`)}
     <div class="field-row">
       ${field('สี', `<div class="row" style="margin:0"><input type="color" data-prop="color" value="${n.color || t.color}"><button class="btn small" data-act="reset-color" title="ใช้สีตามประเภท">ล้าง</button></div>`)}
@@ -121,13 +122,15 @@ function renderNodeInspector(app, pane, n) {
     ${isBoxNode ? '' : `<h3 style="font-size:13px;margin:12px 0 4px">เส้นเชื่อม (${app.graph.degree(n.id)})</h3>
       <table class="data-table link-list"><tbody>${linkRows || '<tr><td class="muted">ยังไม่มี</td></tr>'}</tbody></table>`}
     <div class="btn-row">
+      ${n.type === 'topic' ? `<button class="btn" data-cmd="add-child">+ หัวข้อย่อย (Tab)</button><button class="btn" data-cmd="add-sibling">+ หัวข้อถัดไป (Enter)</button>${(app.tree.children.get(n.id) || []).length || n.collapsed ? `<button class="btn" data-cmd="toggle-collapse">${n.collapsed ? 'ขยายกิ่ง' : 'ยุบกิ่ง'} (/)</button>` : ''}` : ''}
       ${isBoxNode ? '' : '<button class="btn" data-cmd="expand">ขยายเพื่อนบ้าน</button><button class="btn" data-cmd="focus">ซ่อนที่ไม่เกี่ยว</button>'}
       <button class="btn" data-cmd="hide-selected">ซ่อน</button>
-      <button class="btn danger" data-cmd="delete">ลบ</button>
+      ${n.type === 'topic' && (app.tree.children.get(n.id) || []).length ? '<button class="btn danger" data-cmd="delete-branch">ลบทั้งกิ่ง</button><button class="btn" data-cmd="delete-keep-children">ลบเฉพาะหัวข้อนี้</button>' : '<button class="btn danger" data-cmd="delete">ลบ</button>'}
     </div>`;
   bindCmds(pane, app);
   bindProps(pane, app, (patch) => app.mutate(g => g.updateNode(n.id, patch)), n);
   pane.querySelector('[data-act="reset-color"]').addEventListener('click', () => app.mutate(g => g.updateNode(n.id, { color: null })));
+  pane.querySelectorAll('[data-mark]').forEach(b => b.addEventListener('click', () => app.setMark(b.dataset.mark)));
   pane.querySelectorAll('.link-list tr[data-id]').forEach(tr => tr.addEventListener('click', () => app.select([tr.dataset.id])));
 }
 
@@ -327,6 +330,22 @@ function renderLegend(app) {
   pane.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => app.toggleHideType(b.dataset.hide)));
   pane.querySelectorAll('[data-comm]').forEach(d => d.addEventListener('click', () => app.select(an.groups[Number(d.dataset.comm)])));
 }
+
+// ---------------------------------------------------------------- Outline dialog
+export function openOutlineDialog(app) {
+  const dlg = document.getElementById('dlg-outline');
+  const txt = dlg.querySelector('#outline-text');
+  txt.value = '';
+  const sel = [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic');
+  const chk = dlg.querySelector('#outline-under');
+  chk.disabled = !sel; chk.checked = !!sel;
+  dlg.querySelector('#outline-under-label').textContent = sel ? `ต่อใต้หัวข้อ “${app.graph.getNode(sel).label}”` : 'ต่อใต้หัวข้อที่เลือก (ยังไม่ได้เลือก)';
+  dlg.querySelector('#outline-cancel').onclick = () => dlg.close();
+  dlg.querySelector('#outline-import').onclick = () => { const t = txt.value; if (!t.trim()) { app.toast('ยังไม่มีข้อความ', true); return; } dlg.close(); app.importOutlineText(t, { underSelected: chk.checked }); };
+  dlg.showModal(); txt.focus();
+}
+
+const MARKS = ['', '⭐', '❗', '✅', '❓', '💡', '🔥', '📌', '⚠️', '🎯', '1️⃣', '2️⃣', '3️⃣'];
 
 // ---------------------------------------------------------------- CSV dialog
 export function openCsvDialog(app) {

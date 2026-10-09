@@ -10,6 +10,9 @@ export const DEFAULT_NODE = {
   label: 'โหนดใหม่', type: 'generic', x: 0, y: 0,
   color: null, attrs: {}, date: '', source: '', notes: '',
   w: null, h: null, // ใช้กับโน้ต/กรอบกลุ่ม
+  mark: '',         // เครื่องหมายเน้น เช่น ⭐ ❗ ✅
+  collapsed: false, // ยุบกิ่ง (ซ่อนลูกหลาน)
+  order: null,      // ลำดับในหมู่พี่น้อง (null = ตามลำดับสร้าง)
 };
 
 export const DEFAULT_LINK = {
@@ -134,7 +137,7 @@ export class Graph {
     return {
       format: 'linkmap', version: 1,
       meta: { ...this.meta, saved: new Date().toISOString() },
-      nodes: [...this.nodes.values()].map(n => ({ ...n, attrs: { ...n.attrs } })),
+      nodes: [...this.nodes.values()].map(({ level, branchColor, ...n }) => ({ ...n, attrs: { ...n.attrs } })),
       links: [...this.links.values()].map(l => ({ ...l, attrs: { ...l.attrs } })),
     };
   }

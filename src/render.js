@@ -17,7 +17,8 @@ function setAttrs(e, attrs) { for (const [k, v] of Object.entries(attrs)) if (v 
 export function isBox(node) { return node.type === 'note' || node.type === 'group' || node.type === 'topic'; }
 /** ขนาดกล่องหัวข้อ (มายแมป) คำนวณจากความยาวข้อความ */
 export function topicBox(node) {
-  const lines = wrapText(node.label || ' ', 22, 3);
+  const text = (node.mark ? node.mark + ' ' : '') + (node.label || ' ');
+  const lines = wrapText(text, 22, 3);
   const longest = Math.max(...lines.map(l => l.length));
   const scale = node.level === 0 ? 1.25 : 1;
   return { w: Math.max(70, longest * 8.2 * scale + 28), h: (lines.length * 18 + 16) * scale, lines, scale };
@@ -75,7 +76,21 @@ function trimT(node, r, p0, c, p1, fromEnd) {
 }
 
 export function linkGeometry(link, a, b, ra, rb, offset) {
-  // คืน {path, arrow, label:{x,y}, mid}
+  // คืน {path, end, angle, label:{x,y}, start}
+  if (a !== b && a.type === 'topic' && b.type === 'topic' && Math.abs(offset) < 1) {
+    // กิ่งมายแมป: เส้นโค้งรูปตัว S ออกจากขอบซ้าย/ขวาของกล่อง
+    const ba = nodeBox(a), bb = nodeBox(b);
+    const dir = b.x >= a.x ? 1 : -1;
+    const s = { x: a.x + dir * ba.w / 2, y: a.y };
+    const e = { x: b.x - dir * bb.w / 2, y: b.y };
+    if (dir * (e.x - s.x) < 20) { // กล่องซ้อนกันในแนวนอน → ใช้เส้นตรงจากศูนย์กลาง
+      const p = `M${a.x},${a.y} L${b.x},${b.y}`;
+      return { path: p, end: { x: b.x, y: b.y }, angle: Math.atan2(b.y - a.y, b.x - a.x), label: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, start: { x: a.x, y: a.y } };
+    }
+    const mx = (s.x + e.x) / 2;
+    const path = `M${s.x},${s.y} C${mx},${s.y} ${mx},${e.y} ${e.x},${e.y}`;
+    return { path, end: e, angle: dir > 0 ? 0 : Math.PI, label: { x: mx, y: (s.y + e.y) / 2 }, start: s };
+  }
   if (a === b) {
     const r = ra, k = 26 + offset * 0.6;
     const p0 = { x: a.x - r * 0.45, y: a.y - r * 0.9 }, p1 = { x: a.x + r * 0.45, y: a.y - r * 0.9 };
@@ -168,7 +183,7 @@ export class Renderer {
     this.applyView();
   }
   contentBounds(ids = null) {
-    const nodes = [...this.app.graph.nodes.values()].filter(n => !this.app.hidden.has(n.id) && (!ids || ids.has(n.id)));
+    const nodes = [...this.app.graph.nodes.values()].filter(n => !this.app.isHidden(n.id) && (!ids || ids.has(n.id)));
     if (!nodes.length) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const n of nodes) {
@@ -228,7 +243,7 @@ export class Renderer {
     // ---- โหนด & กรอบ ----
     const seen = new Set();
     for (const n of graph.nodes.values()) {
-      if (hidden.has(n.id)) continue;
+      if (this.app.isHidden(n.id)) continue;
       seen.add(n.id);
       let g = this.nodeEls.get(n.id);
       if (!g || g.dataset.type !== n.type) {
@@ -244,7 +259,7 @@ export class Renderer {
     const pairIndex = this._pairIndex();
     for (const l of graph.links.values()) {
       const a = graph.getNode(l.from), b = graph.getNode(l.to);
-      if (!a || !b || hidden.has(a.id) || hidden.has(b.id)) continue;
+      if (!a || !b || this.app.isHidden(a.id) || this.app.isHidden(b.id)) continue;
       seenL.add(l.id);
       let g = this.linkEls.get(l.id);
       if (!g) { g = this._createLinkEl(l); this.linkEls.set(l.id, g); }
@@ -297,6 +312,10 @@ export class Renderer {
       el('circle', { class: 'port port-hit', r: 13 }, g);
       el('circle', { class: 'port port-left', r: 6 }, g);
       el('circle', { class: 'port port-hit', r: 13 }, g);
+      const cg = el('g', { class: 'collapse-btn' }, g);
+      el('circle', { class: 'collapse-bg', r: 9 }, cg);
+      el('text', { class: 'collapse-txt' }, cg);
+      el('text', { class: 'notes-ind' }, g);
       this.gNodes.appendChild(g);
       return g;
     }
@@ -337,8 +356,14 @@ export class Renderer {
     }
     if (n.type === 'topic') {
       const tb = topicBox(n);
-      const [ring, rect, text, badgeBg, badge, port, portHit, portL, portLHit] = g.children;
+      const [ring, rect, text, badgeBg, badge, port, portHit, portL, portLHit, cbtn, notesInd] = g.children;
       const color = this.nodeStroke(n);
+      const tree = this.app.tree;
+      const parentId = tree?.parent?.get(n.id);
+      const parentNode = parentId ? this.app.graph.getNode(parentId) : null;
+      const side = parentNode ? (Math.sign(n.x - parentNode.x) || 1) : 1;
+      const kids = tree?.children?.get(n.id) || [];
+      const hasKids = kids.length > 0;
       const sz = this.app.visual.size?.get(n.id);
       setAttrs(ring, { x: -tb.w / 2 - 5, y: -tb.h / 2 - 5, width: tb.w + 10, height: tb.h + 10, rx: 14 });
       setAttrs(rect, { x: -tb.w / 2, y: -tb.h / 2, width: tb.w, height: tb.h, rx: 10, stroke: color });
@@ -351,8 +376,21 @@ export class Renderer {
       const bd = this.app.visual.badge?.get(n.id);
       if (bd != null) { badgeBg.style.display = ''; badge.style.display = ''; setAttrs(badgeBg, { cx: tb.w / 2, cy: -tb.h / 2, fill: paletteColor(bd) }); badge.textContent = String(bd); setAttrs(badge, { x: tb.w / 2, y: -tb.h / 2 }); }
       else { badgeBg.style.display = 'none'; badge.style.display = 'none'; }
-      setAttrs(port, { cx: tb.w / 2 + 10, cy: 0 }); setAttrs(portHit, { cx: tb.w / 2 + 10, cy: 0 });
-      setAttrs(portL, { cx: -tb.w / 2 - 10, cy: 0 }); setAttrs(portLHit, { cx: -tb.w / 2 - 10, cy: 0 });
+      // จุดเชื่อม (port) อยู่ด้านบน/ล่าง, ปุ่มยุบ/ขยายอยู่ด้านที่มีลูก
+      setAttrs(port, { cx: 0, cy: tb.h / 2 + 10 }); setAttrs(portHit, { cx: 0, cy: tb.h / 2 + 10 });
+      setAttrs(portL, { cx: 0, cy: -tb.h / 2 - 10 }); setAttrs(portLHit, { cx: 0, cy: -tb.h / 2 - 10 });
+      if (hasKids || n.collapsed) {
+        cbtn.style.display = '';
+        cbtn.setAttribute('transform', `translate(${side * (tb.w / 2 + 12)},0)`);
+        cbtn.classList.toggle('collapsed', !!n.collapsed);
+        const cnt = n.collapsed ? this.app.descendantCount?.(n.id) ?? kids.length : 0;
+        cbtn.children[0].setAttribute('stroke', color);
+        cbtn.children[1].textContent = n.collapsed ? String(cnt) : '−';
+        cbtn.children[1].setAttribute('fill', n.collapsed ? '#fff' : color);
+        cbtn.children[0].style.fill = n.collapsed ? color : '#fff';
+      } else cbtn.style.display = 'none';
+      notesInd.textContent = n.notes ? '📝' : '';
+      setAttrs(notesInd, { x: -tb.w / 2 + 2, y: -tb.h / 2 - 3 });
       return;
     }
     if (n.type === 'note') {
@@ -453,7 +491,7 @@ export class Renderer {
   _hitTest(target) {
     if (!target) return null;
     const nodeEl = target.closest?.('.node, .group');
-    if (nodeEl) return { kind: 'node', id: nodeEl.dataset.id, el: nodeEl, port: target.classList.contains('port'), handle: target.classList.contains('resize-handle') };
+    if (nodeEl) return { kind: 'node', id: nodeEl.dataset.id, el: nodeEl, port: target.classList.contains('port'), handle: target.classList.contains('resize-handle'), collapse: !!target.closest('.collapse-btn') };
     const linkEl = target.closest?.('.link');
     if (linkEl) return { kind: 'link', id: linkEl.dataset.id, el: linkEl };
     return null;
@@ -512,6 +550,7 @@ export class Renderer {
       return;
     }
     // โหนด
+    if (hit.collapse) { this.app.toggleCollapse(hit.id); return; }
     if (hit.port || e.altKey) { this._startLinkDrag(hit.id, e); return; }
     if (hit.handle) {
       const n = this.app.graph.getNode(hit.id); const box = nodeBox(n);
@@ -562,7 +601,7 @@ export class Renderer {
       if (d.type === 'marquee') {
         const ids = [];
         for (const n of this.app.graph.nodes.values()) {
-          if (this.app.hidden.has(n.id)) continue;
+          if (this.app.isHidden(n.id)) continue;
           if (n.x >= x && n.x <= x + ww && n.y >= y && n.y <= y + hh) ids.push(n.id);
         }
         this.app.select(ids, { add: d.add, silentPanels: true });
@@ -577,6 +616,24 @@ export class Renderer {
       for (const id of d.ids) {
         const s = d.start.get(id); const n = this.app.graph.getNode(id);
         if (n) { n.x = s.x + dx; n.y = s.y + dy; }
+      }
+      // ลากหัวข้อเดียวไปวางบนหัวข้ออื่น = ย้ายกิ่ง (reparent)
+      if (d.ids.size === 1) {
+        const [mid] = d.ids; const mn = this.app.graph.getNode(mid);
+        let target = null;
+        if (mn && mn.type === 'topic') {
+          const hit = this._hitTest(document.elementFromPoint(e.clientX, e.clientY));
+          if (hit && hit.kind === 'node' && hit.id !== mid) {
+            const tn = this.app.graph.getNode(hit.id);
+            if (tn && tn.type === 'topic' && !this.app.isDescendant?.(hit.id, mid) && this.app.tree?.parent?.get(mid) !== hit.id) target = hit.id;
+          }
+        }
+        if (d.target !== target) {
+          this.nodeEls.get(d.target)?.classList.remove('link-target');
+          d.target = target;
+          this.nodeEls.get(target)?.classList.add('link-target');
+          this.app.setHint(target ? `ปล่อยเพื่อย้ายกิ่งไปอยู่ใต้ “${this.app.graph.getNode(target).label}”` : '');
+        }
       }
       this.render(); return;
     }
@@ -619,6 +676,14 @@ export class Renderer {
       return;
     }
     if (d.type === 'move' || d.type === 'resize') {
+      if (d.target) {
+        this.nodeEls.get(d.target)?.classList.remove('link-target');
+        this.app.setHint('');
+        const [mid] = d.ids;
+        this.app.history.pushSnapshot(d.snap);
+        this.app.reparent(mid, d.target);
+        return;
+      }
       if (d.moved) { this.app.history.pushSnapshot(d.snap); this.app.changed({ structural: false }); }
       return;
     }

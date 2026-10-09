@@ -349,10 +349,22 @@ export function buildTree(nodes, links, rootId = null) {
       }
     }
   };
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const sortChildren = () => {
+    for (const [id, arr] of children) {
+      const idx = new Map(arr.map((c, i) => [c, i]));
+      arr.sort((a, b) => {
+        const oa = byId.get(a)?.order, ob = byId.get(b)?.order;
+        const ka = oa == null ? Infinity : oa, kb = ob == null ? Infinity : ob;
+        return ka - kb || idx.get(a) - idx.get(b);
+      });
+    }
+  };
   if (rootId && idSet.has(rootId)) grow(rootId);
   // รากถัดไป: โหนดที่ยังไม่ถูกเยี่ยม เลือกตัวที่ไม่มีเส้นเข้าและมีเส้นออกมากสุด
   const order = [...ids].sort((a, b) => indeg.get(a) - indeg.get(b) || out.get(b).length - out.get(a).length || und.get(b).length - und.get(a).length);
   for (const id of order) if (!visited.has(id)) grow(id);
+  sortChildren();
   return { roots, children, parent };
 }
 
