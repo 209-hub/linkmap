@@ -342,7 +342,14 @@ function renderLegend(app) {
 export function openAiDialog(app, { prefill = '' } = {}) {
   const dlg = document.getElementById('dlg-ai');
   const prompt = dlg.querySelector('#ai-prompt');
-  if (!prompt.value) prompt.value = app.aiPrompt();
+  dlg.querySelectorAll('input[name="ai-level"]').forEach(r => { r.onchange = () => { app.aiLevel = r.value; prompt.value = app.aiPromptFor(r.value); app.saveOpts(); }; r.checked = r.value === (app.aiLevel || 'detailed'); });
+  if (!prompt.dataset.custom) prompt.value = app.aiPromptFor(app.aiLevel || 'detailed');
+  prompt.oninput = () => { prompt.dataset.custom = '1'; };
+  const selTopic = [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic');
+  const expBtn = dlg.querySelector('#ai-expand');
+  expBtn.disabled = !selTopic;
+  dlg.querySelector('#ai-expand-hint').textContent = selTopic ? `จะขยาย “${app.graph.getNode(selTopic).label}” แล้วต่อใต้หัวข้อนี้` : 'เลือกหัวข้อบนผังก่อน แล้วกดปุ่มนี้';
+  expBtn.onclick = () => app.run('ai:expand');
   const res = dlg.querySelector('#ai-result');
   if (prefill) res.value = prefill;
   const sel = [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic');

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseOutline, importOutline, toOutline, extractJSON, normalizeTree, importTree } from '../src/outline.js';
+import { parseOutline, importOutline, toOutline, extractJSON, normalizeTree, importTree, AI_PROMPTS, buildExpandPrompt } from '../src/outline.js';
 import { Graph } from '../src/graph.js';
 import { sampleGraph } from '../src/sample.js';
 
@@ -70,4 +70,22 @@ test('importTree สร้างมายแมปจาก JSON และต่
   assert.deepEqual(parents(ids[2]), [ids[1]]);
   const more = importTree(g, { text: 'ค', children: [] }, { parentId: ids[3] });
   assert.deepEqual(parents(more[0]), [ids[3]]);
+});
+
+test('importTree ต่อใต้หัวข้อเดิม: รากซ้ำชื่อจะไม่ถูกสร้างซ้ำ', () => {
+  const g = new Graph();
+  const [r] = importTree(g, { text: 'ราก', children: [{ text: 'บทที่ 1' }] });
+  const ch = [...g.links.values()][0].to;
+  const ids = importTree(g, { root: { text: 'บทที่ 1', notes: 'โน้ต', children: [{ text: 'ก' }, { text: 'ข' }] } }, { parentId: ch });
+  assert.equal(ids.length, 2, 'สร้างเฉพาะลูก');
+  assert.equal(g.getNode(ch).notes, 'โน้ต');
+  assert.equal([...g.links.values()].filter(l => l.from === ch).length, 2);
+  assert.equal(g.size.nodes, 4);
+});
+
+test('AI prompts: มีระดับความละเอียดและคำสั่งขยายกิ่ง', () => {
+  assert.ok(AI_PROMPTS.detailed.text.includes('3 ชั้น'));
+  assert.ok(AI_PROMPTS.exhaustive.text.includes('ทุกย่อหน้า'));
+  const p = buildExpandPrompt('บทที่ 2', ['ก', 'ข'], 'วิชา X');
+  assert.ok(p.includes('"บทที่ 2"') && p.includes('"ก"') && p.includes('วิชา X'));
 });

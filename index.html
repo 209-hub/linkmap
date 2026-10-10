@@ -114,6 +114,7 @@
       <div class="menu" data-menu="ai"><button class="menu-btn">✨ เอไอ</button>
         <div class="menu-list">
           <button data-cmd="ai:dialog">สรุปเอกสารเป็นมายแมปด้วยเอไอ… <kbd>Ctrl+J</kbd></button>
+          <button data-cmd="ai:expand">ขยายกิ่งที่เลือกด้วยเอไอ…</button>
           <hr>
           <button data-cmd="ai:gemini">คัดลอกคำสั่ง + เปิด Gemini</button>
           <button data-cmd="ai:chatgpt">คัดลอกคำสั่ง + เปิด ChatGPT</button>
@@ -263,7 +264,16 @@
   <div class="dialog-body">
     <h2>✨ สรุปเอกสารเป็นมายแมปด้วยเอไอ</h2>
     <p class="muted">ไม่ต้องใช้ API ไม่มีค่าใช้จ่าย: แอปจะเตรียมคำสั่งให้ คุณนำไปวางใน Gemini / ChatGPT / Claude พร้อมแนบ PDF หรือข้อความ แล้วนำคำตอบกลับมาวางที่นี่ แอปจะสร้างมายแมปให้ทันที</p>
-    <h3>ขั้นที่ 1 — คัดลอกคำสั่งแล้วเปิดเอไอ (แนบ PDF/สไลด์/ข้อความในหน้านั้น)</h3>
+    <h3>ขั้นที่ 1 — เลือกความละเอียด คัดลอกคำสั่ง แล้วเปิดเอไอ (แนบ PDF/สไลด์/ข้อความในหน้านั้น)</h3>
+    <div class="row" id="ai-level-row" style="gap:12px">
+      <label><input type="radio" name="ai-level" value="brief"> ย่อ (2–3 ชั้น)</label>
+      <label><input type="radio" name="ai-level" value="detailed" checked> ละเอียด (3–5 ชั้น ครบทุกหัวข้อย่อย)</label>
+      <label><input type="radio" name="ai-level" value="exhaustive"> ละเอียดมาก (ทุกย่อหน้า ทุกข้อ)</label>
+    </div>
+    <div class="row" id="ai-expand-row">
+      <button type="button" class="btn" id="ai-expand" title="สร้างคำสั่งให้เอไอขยายเฉพาะหัวข้อที่เลือก แล้วนำผลมาต่อใต้หัวข้อนั้น">🔍 ขยายกิ่งที่เลือกด้วยเอไอ</button>
+      <span class="muted" id="ai-expand-hint" style="font-size:12px"></span>
+    </div>
     <div class="row">
       <button type="button" class="btn primary" data-cmd="ai:gemini">คัดลอก + เปิด Gemini</button>
       <button type="button" class="btn" data-cmd="ai:chatgpt">คัดลอก + เปิด ChatGPT</button>

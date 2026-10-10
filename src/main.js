@@ -9,7 +9,7 @@ import { exportNodesCSV, exportLinksCSV } from './csv.js';
 import { exportImage, exportPDF, exportSVG, downloadText, safeFilename } from './export.js';
 import { IMAGE_MAX_W } from './render.js';
 import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, openAiDialog, showTab } from './ui.js';
-import { toOutline, importOutline, importTree, extractJSON, AI_PROMPT } from './outline.js';
+import { toOutline, importOutline, importTree, extractJSON, AI_PROMPT, AI_PROMPTS, buildExpandPrompt } from './outline.js';
 
 const STORAGE_KEY = 'linkmap.doc.v1';
 const $ = (s) => document.querySelector(s);
@@ -103,8 +103,8 @@ app.confirm = (message, { ok = 'ตกลง', cancel = 'ยกเลิก' } =
 });
 const saved = (r, what) => { if (r === 'declined') app.toast('ยกเลิกการบันทึก'); else app.toast(`${what}แล้ว${r === 'browser' ? ' (ดูในโฟลเดอร์ดาวน์โหลด)' : ''}`); };
 const OPTS_KEY = 'linkmap.opts.v1';
-app.saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify(app.opts)); } catch { /* ignore */ } };
-app.loadOpts = () => { try { const o = JSON.parse(localStorage.getItem(OPTS_KEY) || '{}'); Object.assign(app.opts, o); } catch { /* ignore */ } };
+app.saveOpts = () => { try { localStorage.setItem(OPTS_KEY, JSON.stringify({ ...app.opts, aiLevel: app.aiLevel })); } catch { /* ignore */ } };
+app.loadOpts = () => { try { const o = JSON.parse(localStorage.getItem(OPTS_KEY) || '{}'); if (o.aiLevel) app.aiLevel = o.aiLevel; delete o.aiLevel; Object.assign(app.opts, o); } catch { /* ignore */ } };
 app.setAutoArrange = (on) => {
   app.opts.autoArrange = !!on; app.saveOpts();
   const cb1 = $('#opt-auto-arrange'), cb2 = $('#tb-auto-arrange');
@@ -644,6 +644,7 @@ app.run = async (cmd) => {
   if (cmd.startsWith('layout:')) return app.applyLayout(cmd.slice(7));
   if (cmd.startsWith('theme:')) return app.applyTheme(cmd.slice(6));
   if (cmd === 'ai:dialog') return openAiDialog(app);
+  if (cmd === 'ai:expand') return app.aiExpandSelected();
   if (cmd === 'ai:paste') return openAiDialog(app);
   if (cmd === 'ai:file') { $('#file-ai').value = ''; $('#file-ai').click(); return; }
   if (cmd === 'ai:gemini' || cmd === 'ai:chatgpt' || cmd === 'ai:claude') return app.openAiSite(cmd.slice(3));
@@ -768,7 +769,22 @@ app.run = async (cmd) => {
 };
 // ---------------------------------------------------------------- เอไอ (ผ่านเว็บของผู้ให้บริการ ไม่ใช้ API)
 const AI_SITES = { gemini: 'https://gemini.google.com/app', chatgpt: 'https://chatgpt.com/', claude: 'https://claude.ai/new' };
-app.aiPrompt = () => { const t = $('#ai-prompt'); return (t && t.value.trim()) || AI_PROMPT; };
+app.aiLevel = 'detailed';
+app.aiPromptFor = (level) => (AI_PROMPTS[level] || AI_PROMPTS.detailed).text;
+app.aiPrompt = () => { const t = $('#ai-prompt'); return (t && t.value.trim()) || app.aiPromptFor(app.aiLevel); };
+/** ขยายกิ่งที่เลือก: สร้างคำสั่งเฉพาะหัวข้อ คัดลอก เปิดกล่องเอไอโดยติ๊ก "ต่อใต้หัวข้อที่เลือก" ไว้ให้ */
+app.aiExpandSelected = async () => {
+  const id = [...app.selection].find(i => app.graph.getNode(i)?.type === 'topic');
+  if (!id) { app.toast('เลือกหัวข้อที่ต้องการขยายก่อน', true); return; }
+  const n = app.graph.getNode(id);
+  const kids = (app.tree.children.get(id) || []).map(k => app.graph.getNode(k)?.label).filter(Boolean);
+  const prompt = buildExpandPrompt(n.label, kids, app.graph.meta.title !== 'ผังใหม่' ? app.graph.meta.title : '');
+  const t = $('#ai-prompt'); if (t) { t.value = prompt; t.dataset.custom = '1'; }
+  try { await navigator.clipboard.writeText(prompt); app.toast(`คัดลอกคำสั่งขยาย “${n.label}” แล้ว — วางใน Gemini (แนบเอกสารเดิม) แล้วนำ JSON กลับมาวางในขั้นที่ 2`); }
+  catch { app.toast('คัดลอกอัตโนมัติไม่ได้ เปิด "ดู/แก้คำสั่ง" แล้วคัดลอกเอง', true); }
+  if (!$('#dlg-ai').open) openAiDialog(app);
+  $('#ai-under').checked = true;
+};
 app.copyAiPrompt = async () => {
   try { await navigator.clipboard.writeText(app.aiPrompt()); app.toast('คัดลอกคำสั่งแล้ว — ไปวางในช่องแชทของเอไอ (Ctrl+V) แล้วแนบ PDF'); return true; }
   catch { app.toast('คัดลอกอัตโนมัติไม่ได้ เปิด "ดู/แก้คำสั่ง" แล้วคัดลอกเอง', true); return false; }
