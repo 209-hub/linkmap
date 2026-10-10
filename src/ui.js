@@ -196,6 +196,14 @@ function bindProps(pane, app, commit, obj) {
   });
 }
 
+/** เลือกสมาชิกของกลุ่ม: คลิก = เลือกกลุ่มนี้, Ctrl/Shift+คลิก = เลือกเพิ่ม (คลิกซ้ำกลุ่มที่เลือกครบแล้ว = เอาออก) */
+function selectGroup(app, members, e) {
+  const add = e && (e.ctrlKey || e.metaKey || e.shiftKey);
+  const allIn = members.length && members.every(id => app.selection.has(id));
+  if (add && allIn) { for (const id of members) app.selection.delete(id); app.select([...app.selection]); }
+  else app.select(members, { add });
+}
+
 function bindCmds(root, app) {
   root.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => app.run(b.dataset.cmd)));
 }
@@ -273,8 +281,8 @@ function renderAnalysis(app) {
       </tbody></table></div>`;
   } else if (an?.groups) {
     result = `<div class="analysis-result"><h3>${esc(an.title)} — ${an.groups.length} กลุ่ม${an.modularity != null ? ` · modularity ${an.modularity.toFixed(3)}` : ''}</h3>
-      <div>${an.groups.map((members, i) => `<span class="community-chip" data-idx="${i}"><span class="dot" style="background:${paletteColor(i)};margin:0"></span>กลุ่ม ${i} · ${members.length} โหนด</span>`).join('')}</div>
-      <div class="muted" style="font-size:11px;margin-top:6px">คลิกกลุ่มเพื่อเลือกสมาชิก · เมนู “จัดผัง › จัดกลุ่มตามชุมชน” เพื่อวางแยกกลุ่ม</div></div>`;
+      <div>${an.groups.map((members, i) => `<span class="community-chip ${members.every(id => app.selection.has(id)) ? 'on' : ''}" data-idx="${i}"><span class="dot" style="background:${paletteColor(i)};margin:0"></span>กลุ่ม ${i} · ${members.length} โหนด</span>`).join('')}</div>
+      <div class="muted" style="font-size:11px;margin-top:6px">คลิกกลุ่ม = เลือกสมาชิก · <b>Ctrl/Shift+คลิก</b> = เลือกเพิ่มหลายกลุ่ม (คลิกซ้ำ = เอาออก) · เมนู “จัดผัง › จัดกลุ่มตามชุมชน” เพื่อวางแยกกลุ่ม</div></div>`;
   } else if (an?.path) {
     result = `<div class="analysis-result"><h3>เส้นทางสั้นสุด (${an.path.length - 1} ก้าว)</h3><div class="info-box">${an.path.map(id => esc(app.graph.getNode(id)?.label)).join(' → ')}</div></div>`;
   } else if (an?.error) {
@@ -307,7 +315,7 @@ function renderAnalysis(app) {
     app.runShortestPath(pane.querySelector('#sp-from').value, pane.querySelector('#sp-to').value, pane.querySelector('#sp-weighted').checked);
   });
   pane.querySelectorAll('tr[data-id]').forEach(tr => tr.addEventListener('click', () => { app.select([tr.dataset.id]); app.revealId(tr.dataset.id); }));
-  pane.querySelectorAll('.community-chip').forEach(ch => ch.addEventListener('click', () => app.select(an.groups[Number(ch.dataset.idx)])));
+  pane.querySelectorAll('.community-chip').forEach(ch => ch.addEventListener('click', (e) => selectGroup(app, an.groups[Number(ch.dataset.idx)], e)));
 }
 
 // ---------------------------------------------------------------- ตำนาน
@@ -326,16 +334,16 @@ function renderLegend(app) {
   const an = app.analysis;
   let comm = '';
   if (an?.groups) {
-    comm = `<h3 style="font-size:13px;margin:14px 0 6px">${esc(an.title)}</h3>${an.groups.map((m, i) => `<div class="legend-item" data-comm="${i}" style="cursor:pointer"><span class="dot" style="background:${paletteColor(i)}"></span>กลุ่ม ${i}<span class="count">${m.length}</span></div>`).join('')}`;
+    comm = `<h3 style="font-size:13px;margin:14px 0 6px">${esc(an.title)}</h3><div class="muted" style="font-size:11px;margin-bottom:4px">คลิก = เลือกกลุ่ม · Ctrl/Shift+คลิก = เลือกเพิ่มหลายกลุ่ม</div>${an.groups.map((m, i) => `<div class="legend-item ${m.every(id => app.selection.has(id)) ? 'on' : ''}" data-comm="${i}" style="cursor:pointer"><span class="dot" style="background:${paletteColor(i)}"></span>กลุ่ม ${i}<span class="count">${m.length}</span></div>`).join('')}`;
   }
   if (an?.scores) {
     comm = `<h3 style="font-size:13px;margin:14px 0 6px">${esc(an.title)}</h3><div class="info-box">โหนดใหญ่/สีแดงเข้ม = คะแนนสูง · ฟ้าอ่อน = คะแนนต่ำ</div>`;
   }
   pane.innerHTML = `<h3 style="font-size:13px;margin:0 0 6px">ประเภทเอนทิตี</h3>${items || '<div class="empty-pane">ยังไม่มีโหนด</div>'}
     <div class="info-box" style="margin-top:10px">ความหนาของเส้น = น้ำหนัก · หัวลูกศร = ทิศทาง · เส้นหลายเส้นระหว่างคู่เดียวกันโค้งแยกกัน</div>${comm}`;
-  pane.querySelectorAll('[data-sel]').forEach(b => b.addEventListener('click', () => app.select([...app.graph.nodes.values()].filter(n => n.type === b.dataset.sel).map(n => n.id))));
+  pane.querySelectorAll('[data-sel]').forEach(b => b.addEventListener('click', (e) => selectGroup(app, [...app.graph.nodes.values()].filter(n => n.type === b.dataset.sel).map(n => n.id), e)));
   pane.querySelectorAll('[data-hide]').forEach(b => b.addEventListener('click', () => app.toggleHideType(b.dataset.hide)));
-  pane.querySelectorAll('[data-comm]').forEach(d => d.addEventListener('click', () => app.select(an.groups[Number(d.dataset.comm)])));
+  pane.querySelectorAll('[data-comm]').forEach(d => d.addEventListener('click', (e) => selectGroup(app, an.groups[Number(d.dataset.comm)], e)));
 }
 
 // ---------------------------------------------------------------- AI dialog

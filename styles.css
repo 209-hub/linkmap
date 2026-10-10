@@ -228,6 +228,8 @@ body.dark .tool-check { color: #cbd5e1; }
 .bar { height: 6px; border-radius: 3px; background: var(--accent); display: inline-block; vertical-align: middle; }
 .community-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; font-size: 12px; margin: 2px; cursor: pointer; border: 1px solid var(--border); }
 .community-chip:hover { background: #f1f5f9; }
+.community-chip.on, .legend-item.on { background: var(--accent-soft); border-color: var(--accent); }
+.community-chip { user-select: none; }
 .info-box { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: #334155; line-height: 1.6; }
 .empty-pane { color: var(--muted); text-align: center; padding: 30px 10px; line-height: 1.7; }
 
