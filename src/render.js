@@ -90,16 +90,27 @@ export function linkGeometry(link, a, b, ra, rb, offset) {
   if (a !== b && a.type === 'topic' && b.type === 'topic' && Math.abs(offset) < 1) {
     // กิ่งมายแมป: เส้นโค้งรูปตัว S ออกจากขอบซ้าย/ขวาของกล่อง
     const ba = nodeBox(a), bb = nodeBox(b);
-    const dir = b.x >= a.x ? 1 : -1;
-    const s = { x: a.x + dir * ba.w / 2, y: a.y };
-    const e = { x: b.x - dir * bb.w / 2, y: b.y };
-    if (dir * (e.x - s.x) < 20) { // กล่องซ้อนกันในแนวนอน → ใช้เส้นตรงจากศูนย์กลาง
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dirX = dx >= 0 ? 1 : -1, dirY = dy >= 0 ? 1 : -1;
+    // ช่องว่างระหว่างขอบกล่องในแต่ละแกน: เลือกแกนที่มีช่องว่างมากกว่า (ลูกอยู่ซ้าย/ขวา → เกาะขอบข้าง, อยู่บน/ล่าง → เกาะขอบบน/ล่าง)
+    const gapX = Math.abs(dx) - (ba.w + bb.w) / 2;
+    const gapY = Math.abs(dy) - (ba.h + bb.h) / 2;
+    if (gapY > gapX && gapY > 8) {
+      const s = { x: a.x, y: a.y + dirY * ba.h / 2 };
+      const e = { x: b.x, y: b.y - dirY * bb.h / 2 };
+      const my = (s.y + e.y) / 2;
+      const path = `M${s.x},${s.y} C${s.x},${my} ${e.x},${my} ${e.x},${e.y}`;
+      return { path, end: e, angle: dirY > 0 ? Math.PI / 2 : -Math.PI / 2, label: { x: (s.x + e.x) / 2, y: my }, start: s };
+    }
+    const s = { x: a.x + dirX * ba.w / 2, y: a.y };
+    const e = { x: b.x - dirX * bb.w / 2, y: b.y };
+    if (gapX < 8) { // กล่องซ้อนกันทั้งสองแกน → เส้นตรงจากขอบที่ใกล้ที่สุด
       const p = `M${a.x},${a.y} L${b.x},${b.y}`;
-      return { path: p, end: { x: b.x, y: b.y }, angle: Math.atan2(b.y - a.y, b.x - a.x), label: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, start: { x: a.x, y: a.y } };
+      return { path: p, end: { x: b.x, y: b.y }, angle: Math.atan2(dy, dx), label: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, start: { x: a.x, y: a.y } };
     }
     const mx = (s.x + e.x) / 2;
     const path = `M${s.x},${s.y} C${mx},${s.y} ${mx},${e.y} ${e.x},${e.y}`;
-    return { path, end: e, angle: dir > 0 ? 0 : Math.PI, label: { x: mx, y: (s.y + e.y) / 2 }, start: s };
+    return { path, end: e, angle: dirX > 0 ? 0 : Math.PI, label: { x: mx, y: (s.y + e.y) / 2 }, start: s };
   }
   if (a === b) {
     const r = ra, k = 26 + offset * 0.6;
