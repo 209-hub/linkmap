@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mindmapLayout, buildTree, forceLayout, hierarchicalLayout, circularLayout, groupedLayout, timelineLayout, parseDate, runLayout, LAYOUTS } from '../src/layout.js';
+import { orgchartLayout, mindmapLayout, buildTree, forceLayout, hierarchicalLayout, circularLayout, groupedLayout, timelineLayout, parseDate, runLayout, LAYOUTS } from '../src/layout.js';
 import { sampleGraph } from '../src/sample.js';
 
 function data() {
@@ -158,4 +158,23 @@ test('buildTree: เลือกรากอัตโนมัติ (ไม่�
   assert.ok(t.roots.includes('q'));
   const pos = mindmapLayout(nodes, links);
   assert.equal(pos.size, 4);
+});
+
+test('orgchart: ลูกอยู่ชั้นล่างและเรียงกึ่งกลางใต้พ่อ พี่น้องไม่ทับกัน', () => {
+  const nodes = ['r', 'a', 'b', 'c', 'a1', 'a2', 'a3', 'c1'].map(id => ({ id, x: 0, y: 0, label: id }));
+  const links = [['r', 'a'], ['r', 'b'], ['r', 'c'], ['a', 'a1'], ['a', 'a2'], ['a', 'a3'], ['c', 'c1']].map(([from, to]) => ({ from, to }));
+  const sizeFn = () => ({ w: 100, h: 40 });
+  const pos = orgchartLayout(nodes, links, { rootId: 'r', sizeFn });
+  assert.ok(pos.get('a').y > pos.get('r').y && pos.get('a1').y > pos.get('a').y);
+  assert.ok(Math.abs(pos.get('a').y - pos.get('b').y) < 1, 'พี่น้องชั้นเดียวกัน');
+  const kidsCenter = (pos.get('a1').x + pos.get('a3').x) / 2;
+  assert.ok(Math.abs(kidsCenter - pos.get('a').x) < 1, 'ลูกกึ่งกลางใต้พ่อ');
+  // ช่วงของลูกชั้นแรก (ขอบซ้ายของซับทรี a ถึงขอบขวาของซับทรี c) ต้องกึ่งกลางที่ราก
+  const left = pos.get('a1').x - 50, right = pos.get('c1').x + 50;
+  assert.ok(Math.abs((left + right) / 2 - pos.get('r').x) < 1, 'กิ่งชั้นแรกกึ่งกลางใต้ราก');
+  assert.ok(pos.get('a').x < pos.get('r').x && pos.get('r').x < pos.get('c').x);
+  const sameLevel = ['a1', 'a2', 'a3', 'b', 'c1'].map(id => pos.get(id)).sort((p, q) => p.x - q.x);
+  for (let i = 1; i < sameLevel.length; i++) assert.ok(sameLevel[i].x - sameLevel[i - 1].x >= 100, 'ไม่ทับกัน');
+  const lr = orgchartLayout(nodes, links, { rootId: 'r', sizeFn, direction: 'LR' });
+  assert.ok(lr.get('a').x > lr.get('r').x && Math.abs(lr.get('a').x - lr.get('b').x) < 1);
 });

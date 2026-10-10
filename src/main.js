@@ -189,21 +189,31 @@ app.addTopic = (relation = 'child') => {
   app.revealIfOffscreen(node.id);
   app.editInline(node.id, true);
 };
-app.arrangeMindmap = ({ keepView = false } = {}) => {
+/**
+ * จัดผังแบบต้นไม้ (มายแมป/ผังองค์กร) ทั้งผังหรือเฉพาะชุดโหนด (ids)
+ * รักษาตำแหน่งรากของชุดไว้ ผังจึงไม่กระโดด
+ */
+app.arrangeMindmap = ({ keepView = false, ids = null, algo = 'mindmap', direction = 'TB' } = {}) => {
   app.computeTree();
-  const nodes = app.graph.entityNodes().filter(n => !app.isHidden(n.id));
+  let nodes = app.graph.entityNodes().filter(n => !app.isHidden(n.id));
+  const subset = ids && ids.size >= 2;
+  if (subset) nodes = nodes.filter(n => ids.has(n.id));
   if (!nodes.length) return;
+  const inSet = new Set(nodes.map(n => n.id));
+  // รากของชุด = โหนดที่พ่อไม่อยู่ในชุด (ถ้าเลือกรากจริงอยู่ให้ใช้ตัวนั้น)
   const roots = app.tree?.roots || [];
-  const selRoot = [...app.selection].find(id => roots.includes(id));
-  const pos = runLayout('mindmap', nodes, [...app.graph.links.values()], { rootId: selRoot || roots[0] || null, sizeFn: (n) => nodeBox(n) || { w: 60, h: 44 } });
-  // รักษาตำแหน่งรากไว้ (ผังไม่กระโดด)
-  const r0 = roots[0] ? app.graph.getNode(roots[0]) : null;
+  const selRoot = [...app.selection].find(id => roots.includes(id) && inSet.has(id));
+  const subRoots = nodes.filter(n => !inSet.has(app.tree.parent.get(n.id))).map(n => n.id);
+  const rootId = selRoot || subRoots[0] || roots[0] || null;
+  const links = [...app.graph.links.values()].filter(l => inSet.has(l.from) && inSet.has(l.to));
+  const pos = runLayout(algo, nodes, links, { rootId, direction, sizeFn: (n) => nodeBox(n) || { w: 60, h: 44 } });
+  const r0 = rootId ? app.graph.getNode(rootId) : null;
   const p0 = r0 ? pos.get(r0.id) : null;
   const dx = r0 && p0 ? r0.x - p0.x : 0, dy = r0 && p0 ? r0.y - p0.y : 0;
   for (const [id, p] of pos) app.graph.updateNode(id, { x: Math.round(p.x + dx), y: Math.round(p.y + dy) });
   app.renderer.render();
   scheduleAutosave();
-  if (!keepView) app.renderer.fit();
+  if (!keepView && !subset) app.renderer.fit();
 };
 app.revealIfOffscreen = (id) => app.renderer.ensureVisible(id, 100);
 app.createNote = (x, y) => {
@@ -534,10 +544,21 @@ function layoutTargets(onlySelected) {
   return { nodes: all, subset: false };
 }
 app.applyLayout = (name, { onlySelected = null, ...opts } = {}) => {
-  if (onlySelected == null) onlySelected = $('#layout-selected-only').checked;
+  // เลือกโหนดไว้ตั้งแต่ 2 ตัวขึ้นไป = จัดเฉพาะที่เลือก (ที่เหลืออยู่กับที่)
+  const selCount = [...app.selection].filter(id => app.graph.nodes.has(id)).length;
+  if (onlySelected == null) onlySelected = selCount >= 2;
   const { nodes, subset } = layoutTargets(onlySelected);
   if (!nodes.length) { app.toast('ไม่มีโหนดให้จัด', true); return; }
   let algo = name, extra = {};
+  if (name === 'mindmap' || name === 'orgchart' || name === 'orgchart-lr') {
+    app.history.push(app.graph);
+    app.arrangeMindmap({ ids: subset ? new Set(nodes.map(n => n.id)) : null, algo: name === 'mindmap' ? 'mindmap' : 'orgchart', direction: name === 'orgchart-lr' ? 'LR' : 'TB', keepView: subset });
+    app.changed({ structural: false });
+    if (subset) app.renderer.fit(new Set(nodes.map(n => n.id)), 140);
+    const nm = { mindmap: 'มายแมป', orgchart: 'ผังองค์กร บน→ล่าง', 'orgchart-lr': 'ผังองค์กร ซ้าย→ขวา' }[name];
+    app.toast(`จัดผังแบบ${nm}${subset ? ' เฉพาะที่เลือก' : ''} — ${nodes.length} หัวข้อ`);
+    return;
+  }
   if (name === 'hierarchical-lr') { algo = 'hierarchical'; extra.direction = 'LR'; }
   if (name === 'grouped') extra.keyFn = (n) => n.type;
   if (name === 'grouped-community') {
@@ -547,14 +568,13 @@ app.applyLayout = (name, { onlySelected = null, ...opts } = {}) => {
     extra.keyFn = (n) => membership.get(n.id) ?? 'x';
   }
   if (name === 'force') extra.randomizeZero = true;
-  if (name === 'mindmap') { app.history.push(app.graph); app.arrangeMindmap(); app.toast(`จัดผังเป็นมายแมป — ${nodes.length} หัวข้อ`); return; }
   const links = [...app.graph.links.values()];
   let pos;
   try { pos = runLayout(algo, nodes, links, { ...extra, ...opts }); }
   catch (err) { app.toast('จัดผังไม่สำเร็จ: ' + err.message, true); return; }
   app.mutate(g => { for (const [id, p] of pos) g.updateNode(id, { x: Math.round(p.x), y: Math.round(p.y) }); });
   if (!subset) app.renderer.fit(); else app.renderer.fit(new Set(nodes.map(n => n.id)), 120);
-  const names = { mindmap: 'มายแมป', force: 'กระจายแรง', hierarchical: 'ลำดับชั้น', 'hierarchical-lr': 'ลำดับชั้น ซ้าย→ขวา', circular: 'วงกลม', grouped: 'จัดกลุ่มตามประเภท', 'grouped-community': 'จัดกลุ่มตามชุมชน', timeline: 'ไทม์ไลน์', grid: 'ตาราง' };
+  const names = { mindmap: 'มายแมป', orgchart: 'ผังองค์กร', force: 'กระจายแรง', hierarchical: 'ลำดับชั้น', 'hierarchical-lr': 'ลำดับชั้น ซ้าย→ขวา', circular: 'วงกลม', grouped: 'จัดกลุ่มตามประเภท', 'grouped-community': 'จัดกลุ่มตามชุมชน', timeline: 'ไทม์ไลน์', grid: 'ตาราง' };
   app.toast(`จัดผังแบบ${names[name] || name}${subset ? ' (เฉพาะที่เลือก)' : ''} — ${nodes.length} โหนด`);
 };
 /** วางโหนดที่นำเข้ามาใหม่ (อยู่ที่ 0,0) ด้วย force โดยไม่ขยับของเดิมมาก */
@@ -1027,7 +1047,7 @@ window.addEventListener('keydown', (e) => {
   if (tools[lower]) { app.setTool(tools[lower]); return; }
   if (key === 'Enter') { e.preventDefault(); app.addTopic(e.shiftKey ? 'child' : 'sibling'); return; }
   if (key === 'Tab' || key === 'Insert') { e.preventDefault(); app.addTopic('child'); return; }
-  const layouts = { 1: 'mindmap', 2: 'hierarchical', 3: 'force', 4: 'circular', 5: 'grouped', 6: 'timeline' };
+  const layouts = { 1: 'mindmap', 2: 'orgchart', 3: 'force', 4: 'circular', 5: 'grouped', 6: 'timeline' };
   if (layouts[key]) { app.run('layout:' + layouts[key]); return; }
   if (key === '0') { app.run('zoom-100'); return; }
   if (lower === 'f') { app.run('fit'); return; }

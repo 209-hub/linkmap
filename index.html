@@ -79,8 +79,10 @@
       <div class="menu" data-menu="layout"><button class="menu-btn">จัดผัง</button>
         <div class="menu-list">
           <button data-cmd="layout:mindmap">มายแมป ซ้าย-ขวา รอบหัวข้อหลัก <kbd>1</kbd></button>
-          <button data-cmd="layout:hierarchical">ต้นไม้ บน→ล่าง <kbd>2</kbd></button>
-          <button data-cmd="layout:hierarchical-lr">ต้นไม้ ซ้าย→ขวา</button>
+          <button data-cmd="layout:orgchart">ผังองค์กร บน→ล่าง (ลูกกึ่งกลางใต้พ่อ) <kbd>2</kbd></button>
+          <button data-cmd="layout:orgchart-lr">ผังองค์กร ซ้าย→ขวา</button>
+          <button data-cmd="layout:hierarchical">ลำดับชั้นตามทิศทางเส้น บน→ล่าง</button>
+          <button data-cmd="layout:hierarchical-lr">ลำดับชั้นตามทิศทางเส้น ซ้าย→ขวา</button>
           <button data-cmd="layout:force">กระจายแรง (force-directed) <kbd>3</kbd></button>
           <button data-cmd="layout:circular">วงกลม <kbd>4</kbd></button>
           <button data-cmd="layout:grouped">จัดกลุ่มตามประเภท <kbd>5</kbd></button>
@@ -89,7 +91,7 @@
           <button data-cmd="layout:grid">ตาราง</button>
           <hr>
           <label class="menu-check"><input type="checkbox" id="opt-auto-arrange" checked> จัดผังมายแมปอัตโนมัติเมื่อจดหัวข้อใหม่</label>
-          <label class="menu-check"><input type="checkbox" id="layout-selected-only"> จัดเฉพาะที่เลือก</label>
+          <div class="cm-title" style="padding:4px 10px;font-size:11px;color:var(--muted);white-space:normal;max-width:300px">เลือกโหนดไว้ตั้งแต่ 2 ตัวขึ้นไปแล้วกดจัดผัง = จัดเฉพาะที่เลือก ส่วนอื่นอยู่กับที่</div>
           <hr>
           <button data-cmd="fit">ฟิตให้พอดีจอ <kbd>F</kbd></button>
           <button data-cmd="zoom-100">ซูม 100% <kbd>0</kbd></button>
@@ -342,7 +344,7 @@
           <li><kbd>Space</kbd> แตะ = สลับ เลือก ⇄ เลื่อน · กดค้างแล้วลาก = เลื่อนชั่วคราว</li>
           <li><kbd>V</kbd> เลือก <kbd>H</kbd> เลื่อน <kbd>N</kbd> โหนด <kbd>L</kbd> เส้น <kbd>T</kbd> โน้ต <kbd>G</kbd> กรอบ</li>
           <li><kbd>Delete</kbd> ลบ · <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> เลิกทำ/ทำซ้ำ · <kbd>Ctrl+A</kbd> เลือกทั้งหมด · <kbd>Ctrl+D</kbd> ทำสำเนา</li>
-          <li><kbd>1</kbd>–<kbd>6</kbd> จัดผัง มายแมป / ต้นไม้ / force / วงกลม / กลุ่ม / ไทม์ไลน์ · <kbd>F</kbd> ฟิต · <kbd>0</kbd> 100%</li>
+          <li><kbd>1</kbd>–<kbd>6</kbd> จัดผัง มายแมป / ผังองค์กร / force / วงกลม / กลุ่ม / ไทม์ไลน์ · เลือกโหนด ≥2 ก่อน = จัดเฉพาะที่เลือก · <kbd>F</kbd> ฟิต · <kbd>0</kbd> 100%</li>
           <li><kbd>E</kbd> ขยายเพื่อนบ้าน · <kbd>H</kbd>(ขณะเลือก) ซ่อนที่ไม่เกี่ยว · <kbd>Shift+H</kbd> แสดงทั้งหมด · <kbd>P</kbd> เส้นทางสั้นสุด</li>
           <li><kbd>Ctrl+S</kbd> บันทึก JSON · <kbd>Ctrl+O</kbd> เปิด · <kbd>Ctrl+F</kbd> ค้นหา · <kbd>\</kbd> ซ่อนแผงขวา · <kbd>Esc</kbd> ยกเลิก/ล้างการเลือก</li>
         </ul>

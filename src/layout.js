@@ -421,6 +421,50 @@ export function mindmapLayout(nodes, links, opts = {}) {
   return recenter(pos, nodes);
 }
 
+
+// ---------------------------------------------------------------- orgchart (ผังองค์กร: ลูกเรียงกึ่งกลางใต้พ่อ)
+/** ต้นไม้แบบ tidy: ความกว้างของซับทรี = max(กว้างของตัวเอง, ผลรวมความกว้างลูก + ช่องว่าง) แล้ววางลูกกึ่งกลางใต้พ่อ */
+export function orgchartLayout(nodes, links, opts = {}) {
+  const { rootId = null, direction = 'TB', siblingGap = 28, levelGap = 70, sizeFn = null, treeGap = 80 } = opts;
+  const pos = new Map();
+  if (!nodes.length) return pos;
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const { roots, children } = buildTree(nodes, links, rootId);
+  const horiz = direction === 'LR';
+  // ขนาดในแกน "ข้าง" (กว้างเมื่อ TB, สูงเมื่อ LR) และแกน "ลึก"
+  const size = (id) => { const b = sizeFn ? sizeFn(byId.get(id)) : { w: 120, h: 44 }; return horiz ? { side: b.h, depth: b.w } : { side: b.w, depth: b.h }; };
+  const sub = new Map();
+  const measure = (id) => {
+    const ch = children.get(id);
+    const own = size(id).side;
+    if (!ch.length) { sub.set(id, own); return own; }
+    const total = ch.reduce((s, c) => s + measure(c), 0) + siblingGap * (ch.length - 1);
+    const w = Math.max(own, total); sub.set(id, w); return w;
+  };
+  const levelDepth = []; // ความลึกสูงสุดของโหนดในแต่ละชั้น เพื่อให้ชั้นถัดไปไม่ทับ
+  const collectDepth = (id, lv) => { levelDepth[lv] = Math.max(levelDepth[lv] || 0, size(id).depth); for (const c of children.get(id)) collectDepth(c, lv + 1); };
+  const levelPos = (lv) => { let d = 0; for (let i = 0; i < lv; i++) d += (levelDepth[i] || 0) + levelGap; return d + (levelDepth[lv] || 0) / 2; };
+  const place = (id, sideStart, lv) => {
+    const w = sub.get(id);
+    const center = sideStart + w / 2;
+    const d = levelPos(lv);
+    pos.set(id, horiz ? { x: d, y: center } : { x: center, y: d });
+    const ch = children.get(id);
+    const total = ch.reduce((s, c) => s + sub.get(c), 0) + siblingGap * (ch.length - 1);
+    let cur = center - total / 2;
+    for (const c of ch) { place(c, cur, lv + 1); cur += sub.get(c) + siblingGap; }
+  };
+  let cursor = 0;
+  for (const r of roots) {
+    levelDepth.length = 0; collectDepth(r, 0);
+    measure(r);
+    place(r, cursor, 0);
+    cursor += sub.get(r) + treeGap;
+  }
+  for (const p of pos.values()) { p.x = Math.round(p.x); p.y = Math.round(p.y); }
+  return recenter(pos, nodes);
+}
+
 // ---------------------------------------------------------------- grid (ตัวช่วย)
 export function gridLayout(nodes, links, opts = {}) {
   const { spacing = NODE_SPACING } = opts;
@@ -432,6 +476,7 @@ export function gridLayout(nodes, links, opts = {}) {
 
 export const LAYOUTS = {
   mindmap: { name: 'มายแมป (ซ้าย-ขวา)', fn: mindmapLayout },
+  orgchart: { name: 'ผังองค์กร (บน→ล่าง)', fn: orgchartLayout },
   force: { name: 'กระจายแรง (force)', fn: forceLayout },
   hierarchical: { name: 'ลำดับชั้น (hierarchical)', fn: hierarchicalLayout },
   circular: { name: 'วงกลม (circular)', fn: circularLayout },
