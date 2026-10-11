@@ -925,10 +925,20 @@ app.onViewChanged = () => { $('#zoom-label').textContent = Math.round(app.view.k
 // ---------------------------------------------------------------- เมนู/แถบเครื่องมือ/ค้นหา
 function initMenus() {
   const menus = [...document.querySelectorAll('#menubar .menu')];
-  const closeAll = () => menus.forEach(m => m.classList.remove('open'));
+  const closeAll = () => menus.forEach(m => { m.classList.remove('open'); const l = m.querySelector('.menu-list'); l.style.position = ''; l.style.left = ''; l.style.top = ''; l.style.maxHeight = ''; });
+  // วางรายการเมนูแบบ fixed เพื่อไม่ให้ถูกแถบบนที่เลื่อนได้ (จอแคบ/มือถือ) ตัดออก และไม่หลุดขอบจอ
+  const openMenu = (m) => {
+    closeAll(); m.classList.add('open');
+    const btn = m.querySelector('.menu-btn'), list = m.querySelector('.menu-list');
+    const r = btn.getBoundingClientRect();
+    list.style.position = 'fixed'; list.style.top = `${r.bottom + 2}px`;
+    list.style.maxHeight = `${window.innerHeight - r.bottom - 12}px`; list.style.overflowY = 'auto';
+    const w = list.offsetWidth;
+    list.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - w - 4))}px`;
+  };
   menus.forEach(m => {
-    m.querySelector('.menu-btn').addEventListener('click', (e) => { e.stopPropagation(); const open = m.classList.contains('open'); closeAll(); if (!open) m.classList.add('open'); });
-    m.querySelector('.menu-btn').addEventListener('pointerenter', () => { if (menus.some(x => x.classList.contains('open'))) { closeAll(); m.classList.add('open'); } });
+    m.querySelector('.menu-btn').addEventListener('click', (e) => { e.stopPropagation(); const open = m.classList.contains('open'); if (open) closeAll(); else openMenu(m); });
+    m.querySelector('.menu-btn').addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && menus.some(x => x.classList.contains('open')) && !m.classList.contains('open')) openMenu(m); });
     m.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => { closeAll(); app.run(b.dataset.cmd); }));
   });
   document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.menu')) closeAll(); });

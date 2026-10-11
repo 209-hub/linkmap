@@ -53,9 +53,10 @@ kbd { font: 11px/1 ui-monospace, Consolas, monospace; background: #f1f5f9; borde
 .menu { position: relative; }
 .menu-btn { background: none; border: 0; border-radius: 6px; padding: 6px 10px; white-space: nowrap; }
 .menu-btn:hover, .menu.open .menu-btn { background: #f1f5f9; }
-.menu-list { display: none; position: absolute; top: 100%; left: 0; min-width: 260px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 6px; z-index: 50; }
+.menu-list { display: none; position: absolute; top: 100%; left: 0; min-width: 260px; max-width: calc(100vw - 8px); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 6px; z-index: 50; }
 .menu.open .menu-list { display: block; }
-.menu-list button, .menu-list .menu-check { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 10px; white-space: nowrap; }
+.menu-list button, .menu-list .menu-check { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 9px 10px; white-space: nowrap; }
+@media (pointer: coarse) { .menu-list button, .menu-list .menu-check { padding: 11px 10px; font-size: 15px; } .menu-btn { padding: 8px 9px; font-size: 15px; } }
 .menu-list button:hover, .menu-list .menu-check:hover { background: var(--accent-soft); }
 .menu-list button kbd { margin-left: auto; }
 .menu-list hr { border: 0; border-top: 1px solid var(--border); margin: 5px 0; }
