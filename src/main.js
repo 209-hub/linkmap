@@ -10,6 +10,7 @@ import { exportImage, exportPDF, exportSVG, downloadText, safeFilename } from '.
 import { IMAGE_MAX_W } from './render.js';
 import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, openAiDialog, showTab } from './ui.js';
 import { toOutline, importOutline, importTree, extractJSON, AI_PROMPT, AI_PROMPTS, buildExpandPrompt } from './outline.js';
+import { APP_VERSION } from './version.js';
 
 const STORAGE_KEY = 'linkmap.doc.v1';
 const $ = (s) => document.querySelector(s);
@@ -114,8 +115,8 @@ app.setAutoArrange = (on) => {
 app.setPanel = (show) => {
   app.opts.panel = !!show; app.saveOpts();
   $('#workspace').classList.toggle('panel-hidden', !app.opts.panel);
-  $('#btn-panel').classList.toggle('on', app.opts.panel);
-  $('#tb-panel').classList.toggle('active', app.opts.panel);
+  $('#btn-panel')?.classList.toggle('on', app.opts.panel);
+  $('#tb-panel')?.classList.toggle('active', app.opts.panel);
   if (app.opts.panel) refreshPanels(app);
   app.renderer?.applyView();
 };
@@ -934,13 +935,13 @@ function initMenus() {
   $('#opt-link-labels').addEventListener('change', (e) => { app.opts.linkLabels = e.target.checked; app.saveOpts(); app.renderer.render(); });
   $('#opt-grid').addEventListener('change', (e) => { app.opts.grid = e.target.checked; app.saveOpts(); app.renderer.applyView(); });
   $('#opt-snap').addEventListener('change', (e) => { app.opts.snap = e.target.checked; app.saveOpts(); });
-  $('#opt-auto-arrange').addEventListener('change', (e) => app.setAutoArrange(e.target.checked));
-  $('#tb-auto-arrange').addEventListener('change', (e) => { app.setAutoArrange(e.target.checked); app.toast(e.target.checked ? 'เปิดจัดผังอัตโนมัติ: จัดใหม่ทุกครั้งที่เพิ่มหัวข้อ' : 'ปิดจัดผังอัตโนมัติ: หัวข้อใหม่จะวางข้างพ่อโดยไม่ขยับของเดิม (กดปุ่ม "จัดผัง" เมื่อต้องการ)'); });
-  $('#btn-panel').addEventListener('click', () => app.setPanel(!app.opts.panel));
-  $('#tb-panel').addEventListener('click', () => app.setPanel(!app.opts.panel));
+  $('#opt-auto-arrange')?.addEventListener('change', (e) => app.setAutoArrange(e.target.checked));
+  $('#tb-auto-arrange')?.addEventListener('change', (e) => { app.setAutoArrange(e.target.checked); app.toast(e.target.checked ? 'เปิดจัดผังอัตโนมัติ: จัดใหม่ทุกครั้งที่เพิ่มหัวข้อ' : 'ปิดจัดผังอัตโนมัติ: หัวข้อใหม่จะวางข้างพ่อโดยไม่ขยับของเดิม (กดปุ่ม "จัดผัง" เมื่อต้องการ)'); });
+  $('#btn-panel')?.addEventListener('click', () => app.setPanel(!app.opts.panel));
+  $('#tb-panel')?.addEventListener('click', () => app.setPanel(!app.opts.panel));
   document.querySelectorAll('#toolbar .tool-action').forEach(b => b.addEventListener('click', () => app.run(b.dataset.cmd)));
   const themeRow = $('#theme-row');
-  for (const [key, t] of Object.entries(THEMES)) {
+  if (themeRow) for (const [key, t] of Object.entries(THEMES)) {
     const b = document.createElement('button'); b.className = 'theme-chip'; b.dataset.theme = key; b.title = t.name;
     b.style.background = `linear-gradient(135deg, ${t.palette[0]} 0 50%, ${t.palette[1]} 50% 100%)`; b.style.boxShadow = `inset 0 0 0 3px ${t.bg}`;
     b.addEventListener('click', (e) => { e.stopPropagation(); app.applyTheme(key); });
@@ -1071,13 +1072,31 @@ window.addEventListener('keyup', (e) => {
 });
 
 // ---------------------------------------------------------------- เริ่มต้น
+function checkVersion() {
+  // index.html กับ main.js ต้องเป็นเวอร์ชันเดียวกัน ถ้าไม่ตรง (แคชเก่าค้าง) ให้โหลดใหม่แบบข้ามแคชหนึ่งครั้ง
+  const htmlVer = document.querySelector('meta[name="app-version"]')?.content || '0';
+  const hv = $('#help-version'); if (hv) hv.textContent = APP_VERSION;
+  if (htmlVer !== APP_VERSION) {
+    const key = 'linkmap.reloaded.' + APP_VERSION + '.' + htmlVer;
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1');
+      caches?.keys?.().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+      setTimeout(() => location.reload(), 300);
+      return false;
+    }
+    console.warn('เวอร์ชันไฟล์ไม่ตรงกัน', htmlVer, APP_VERSION);
+  }
+  return true;
+}
+const safe = (label, fn) => { try { fn(); } catch (err) { console.error('เริ่ม ' + label + ' ไม่สำเร็จ', err); } };
 function boot() {
+  checkVersion();
   app.renderer = new Renderer(app, $('#canvas'));
-  app.loadOpts();
-  initMenus(); initSearch(); initPanels(app);
-  app.setAutoArrange(app.opts.autoArrange);
-  app.setPanel(app.opts.panel);
-  $('#opt-link-labels').checked = app.opts.linkLabels; $('#opt-grid').checked = app.opts.grid; $('#opt-snap').checked = app.opts.snap;
+  safe('ตัวเลือก', () => app.loadOpts());
+  safe('เมนู', initMenus); safe('ค้นหา', initSearch); safe('แผงขวา', () => initPanels(app));
+  safe('ออโต้จัดผัง', () => app.setAutoArrange(app.opts.autoArrange));
+  safe('แผงขวา', () => app.setPanel(app.opts.panel));
+  safe('ตัวเลือกมุมมอง', () => { $('#opt-link-labels').checked = app.opts.linkLabels; $('#opt-grid').checked = app.opts.grid; $('#opt-snap').checked = app.opts.snap; });
   app.setTool('select');
   if (!restoreAutosave()) loadSample();
   app.renderer.applyView();

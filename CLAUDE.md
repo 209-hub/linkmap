@@ -10,3 +10,4 @@
 - โครง: `src/main.js` ประสานงาน+คีย์ลัด, `render.js` SVG+การโต้ตอบ (ระวัง: ระหว่างลากมี pointer capture ต้องใช้ `document.elementFromPoint` ในการ hit-test), `ui.js` แผงขวา, `layout.js`/`analysis.js` อัลกอริทึมล้วน
 - สไตล์ SVG: CSS ใน `styles.css` ชนะ presentation attribute — ถ้าต้องกำหนด fill/stroke-width ต่อโหนด ให้ตั้งผ่าน `element.style.*`
 - ภาพส่งออก (PNG/SVG) ใช้ CSS ชุดย่อยใน `src/export.js` — เพิ่มสไตล์ใหม่ที่มีผลกับภาพต้องเพิ่มที่นั่นด้วย
+- ก่อนดีพลอยทุกครั้ง: `python tools/set_version.py` เพื่อให้ index.html / src/version.js / sw.js มีเลขเวอร์ชันตรงกัน (แอปจะโหลดใหม่เองเมื่อแคชเก่าค้าง) แล้วค่อย commit/push และ publish Artifact
