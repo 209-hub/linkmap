@@ -580,7 +580,7 @@ export class Renderer {
     const now = performance.now();
     const last = this._lastDown;
     this._lastDown = { t: now, x: e.clientX, y: e.clientY, id: hit?.id ?? null };
-    if (e.button === 0 && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
+    if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
       this._lastDown = null;
       this._dblHandled = now;
       e.preventDefault(); // กันเบราว์เซอร์ย้ายโฟกัสไปจากช่องพิมพ์ที่กำลังจะเปิด
@@ -613,12 +613,13 @@ export class Renderer {
     }
     // ---- เครื่องมือเลือก ----
     if (!hit) {
-      this.drag = { type: 'marquee', x0: w.x, y0: w.y, add: e.shiftKey, rect: el('rect', { class: 'marquee' }, this.gOverlay) };
-      if (!e.shiftKey) this.app.select([]);
+      const addSel = e.shiftKey || e.ctrlKey || e.metaKey;
+      this.drag = { type: 'marquee', x0: w.x, y0: w.y, add: addSel, rect: el('rect', { class: 'marquee' }, this.gOverlay) };
+      if (!addSel) this.app.select([]);
       return;
     }
     if (hit.kind === 'link') {
-      if (e.shiftKey) this.app.toggleSelect(hit.id); else this.app.select([hit.id]);
+      if (e.shiftKey || e.ctrlKey || e.metaKey) this.app.toggleSelect(hit.id); else this.app.select([hit.id]);
       return;
     }
     // โหนด
@@ -630,7 +631,9 @@ export class Renderer {
       this.drag = { type: 'resize', id: hit.id, w0: box.w, h0: box.h, cx0: n.x, cy0: n.y, x0: w.x, y0: w.y, snap: this.app.history.snapshot(this.app.graph), moved: false };
       return;
     }
-    if (e.shiftKey) { this.app.toggleSelect(hit.id); return; }
+    // Shift+คลิก = เลือกทั้งกิ่ง (หัวข้อ + ลูกหลานทั้งหมด) · Ctrl+คลิก = เลือกเพิ่ม/เอาออก · Ctrl+Shift = เพิ่มทั้งกิ่ง
+    if (e.shiftKey) { this.app.selectBranch(hit.id, { add: e.ctrlKey || e.metaKey }); return; }
+    if (e.ctrlKey || e.metaKey) { this.app.toggleSelect(hit.id); return; }
     if (!this.app.selection.has(hit.id)) this.app.select([hit.id]);
     // เริ่มลาก: โหนดที่เลือกทั้งหมด + สมาชิกของกรอบที่เลือก
     const ids = new Set([...this.app.selection].filter(id => this.app.graph.nodes.has(id)));

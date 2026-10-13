@@ -85,6 +85,13 @@ app.select = (ids, { add = false, silentPanels = false } = {}) => {
   if (!silentPanels) refreshPanels(app);
   updateStatus();
 };
+/** เลือกหัวข้อพร้อมลูกหลานทั้งหมด (ที่ยังไม่ถูกซ่อน) */
+app.selectBranch = (id, { add = false } = {}) => {
+  if (!app.graph.nodes.has(id)) return;
+  const ids = [id, ...app.descendants(id)].filter(x => !app.isHidden(x));
+  app.select(ids, { add });
+  if (ids.length > 1) app.toast(`เลือกทั้งกิ่ง ${ids.length} หัวข้อ`);
+};
 app.toggleSelect = (id) => { if (app.selection.has(id)) app.selection.delete(id); else app.selection.add(id); app.renderer.render(); refreshPanels(app); updateStatus(); };
 app.setHint = (t) => { $('#status-hint').textContent = t; };
 app.toast = (msg, isError = false) => {
@@ -487,6 +494,7 @@ app.showContextMenu = (sx, sy, hit) => {
       items.push({ sep: true });
       items.push({ label: 'ประเภท ▸', sub: TYPE_ORDER.map(t => ({ label: `${ENTITY_TYPES[t].icon} ${ENTITY_TYPES[t].label}`, cmd: () => app.mutate(g => selNodes.forEach(id => { const x = g.getNode(id); if (x.type !== 'group' && x.type !== 'note') g.updateNode(id, { type: t }); })) })) });
     }
+    if ((app.tree.children.get(hit.id) || []).length) items.push({ label: '⌥ เลือกทั้งกิ่ง (Shift+คลิก)', cmd: () => app.run('select-branch') });
     if (selNodes.length >= 2) items.push({ label: '▢ สร้างกรอบรอบที่เลือก', cmd: () => app.createGroupAroundSelection() });
     if (selNodes.length === 2) items.push({ label: '⇝ เส้นทางสั้นสุดระหว่าง 2 โหนด', cmd: () => app.run('analysis:path') });
     if (selNodes.length >= 2) items.push({ label: '⌗ จัดผังเฉพาะที่เลือก (force)', cmd: () => app.applyLayout('force', { onlySelected: true }) });
@@ -706,6 +714,7 @@ app.run = async (cmd) => {
     case 'undo': { const g = app.history.undo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
     case 'redo': { const g = app.history.redo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
     case 'select-all': app.select([...app.graph.nodes.keys()].filter(id => !app.isHidden(id))); break;
+    case 'select-branch': { const ids = selNodes(); if (!ids.length) { app.toast('เลือกหัวข้อก่อน', true); return; } app.selection.clear(); ids.forEach(id => app.selectBranch(id, { add: true })); break; }
     case 'delete': {
       if (!app.selection.size) return;
       const ids = [...app.selection];
@@ -1029,7 +1038,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (ctrl) {
     const k = e.key.toLowerCase();
-    const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png', b: 'bold', i: 'italic', p: 'export-pdf' };
+    const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: e.shiftKey ? 'select-branch' : 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png', b: 'bold', i: 'italic', p: 'export-pdf' };
     if (k === 'f') { e.preventDefault(); $('#search').focus(); return; }
     if (k === 'm') { e.preventDefault(); app.run(e.shiftKey ? 'copy-outline' : 'import-outline'); return; }
     if (k === 'j') { e.preventDefault(); app.run('ai:dialog'); return; }

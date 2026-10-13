@@ -6,7 +6,7 @@
 <title>LinkMap — มายแมปจดเรียน จัดผังอัตโนมัติ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232563eb'/%3E%3Ccircle cx='24' cy='12' r='5' fill='%237c3aed'/%3E%3Ccircle cx='14' cy='25' r='5' fill='%23059669'/%3E%3Cpath d='M8 8L24 12L14 25Z' fill='none' stroke='%2394a3b8' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
-<meta name="app-version" content="2026-10-11.1922">
+<meta name="app-version" content="2026-10-13.1018">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
 <meta name="mobile-web-app-capable" content="yes">
@@ -54,6 +54,7 @@
           <button data-cmd="redo">ทำซ้ำ <kbd>Ctrl+Y</kbd></button>
           <hr>
           <button data-cmd="select-all">เลือกทั้งหมด <kbd>Ctrl+A</kbd></button>
+          <button data-cmd="select-branch">เลือกทั้งกิ่งของหัวข้อที่เลือก <kbd>Ctrl+Shift+A</kbd></button>
           <button data-cmd="duplicate">ทำสำเนาที่เลือก <kbd>Ctrl+D</kbd></button>
           <button data-cmd="delete">ลบที่เลือก <kbd>Delete</kbd></button>
           <hr>
@@ -330,7 +331,7 @@
           <li><b>ล้อเมาส์</b> ซูม · <b>ลากปุ่มกลาง / Space+ลาก / เครื่องมือเลื่อน</b> แพน</li>
           <li><b>ปุ่ม +</b> ข้างหัวข้อที่เลือก = เพิ่มหัวข้อย่อย (แตะได้บนแท็บเล็ต) · <b>บีบสองนิ้ว</b> ซูม/เลื่อน</li>
           <li><b>ดับเบิลคลิกพื้นว่าง</b> สร้างหัวข้อ · <b>ดับเบิลคลิกหัวข้อ/เส้น</b> แก้ข้อความ</li>
-          <li><b>ลากพื้นว่าง</b> เลือกเป็นกรอบ · <b>Shift+คลิก</b> เลือกเพิ่ม/ลด</li>
+          <li><b>ลากพื้นว่าง</b> เลือกเป็นกรอบ · <b>Shift+คลิก</b> เลือกทั้งกิ่ง (หัวข้อ+ลูกหลาน) · <b>Ctrl+คลิก</b> เลือกเพิ่ม/เอาออก · <b>Ctrl+Shift+คลิก</b> เพิ่มทั้งกิ่ง</li>
           <li><b>ลากจากจุดเล็กข้างโหนด</b> (หรือ Alt+ลากโหนด) สร้างเส้นเชื่อม</li>
           <li><b>คลิกขวา</b> เมนูลัด · <b>ลากมุมขวาล่าง</b> ปรับขนาดโน้ต/กรอบ</li>
         </ul>
@@ -358,6 +359,6 @@
 </dialog>
 
 <div id="toast" class="toast hidden"></div>
-<script type="module" src="src/main.js?v=2026-10-11.1922"></script>
+<script type="module" src="src/main.js?v=2026-10-13.1018"></script>
 </body>
 </html>

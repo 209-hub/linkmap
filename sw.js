@@ -1,5 +1,5 @@
 // Service worker: ให้เปิดใช้ออฟไลน์ได้ (network-first: มีเน็ตใช้ไฟล์ล่าสุดเสมอ ไม่มีเน็ตใช้สำเนาที่เก็บไว้)
-const CACHE = 'linkmap-2026-10-11.1922';
+const CACHE = 'linkmap-2026-10-13.1018';
 const ASSETS = ['./', 'index.html', 'styles.css', 'manifest.webmanifest',
   'src/main.js', 'src/graph.js', 'src/layout.js', 'src/analysis.js', 'src/csv.js', 'src/render.js', 'src/ui.js',
   'src/export.js', 'src/types.js', 'src/sample.js', 'src/outline.js', 'src/pdf.js', 'assets/icon-192.png', 'assets/icon-512.png'];
