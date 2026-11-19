@@ -54,7 +54,8 @@ app.mutate = (fn) => {
 };
 app.changed = ({ structural = true } = {}) => {
   // ตัดการเลือกที่หายไป
-  for (const id of [...app.selection]) if (!app.graph.nodes.has(id) && !app.graph.links.has(id)) app.selection.delete(id);
+  const strokeIds = new Set(app.graph.strokes.map(s => s.id));
+  for (const id of [...app.selection]) if (!app.graph.nodes.has(id) && !app.graph.links.has(id) && !strokeIds.has(id)) app.selection.delete(id);
   for (const id of [...app.hidden]) if (!app.graph.nodes.has(id)) app.hidden.delete(id);
   if (structural) { app.computeTree(); if (app.analysis?.recompute) app.analysis.recompute(); }
   app.docUpdated = Date.now();
@@ -62,7 +63,7 @@ app.changed = ({ structural = true } = {}) => {
   refreshPanels(app);
   updateStatus();
   scheduleAutosave();
-  $('#empty-hint').classList.toggle('hidden', app.graph.nodes.size > 0);
+  $('#empty-hint').classList.toggle('hidden', app.graph.nodes.size > 0 || app.graph.strokes.length > 0);
 };
 /** คำนวณระดับชั้น (level) และสีกิ่งของหัวข้อแบบมายแมป */
 app.computeTree = () => {
@@ -180,7 +181,7 @@ app.setTool = (tool) => {
   svg.className.baseVal = `tool-${tool}`;
   app.renderer.linkSource = null;
   const po = $('#pen-opts'); if (po) po.classList.toggle('hidden', tool !== 'pen');
-  const hints = { pen: 'ลากเพื่อขีดเขียน · เลือกสี/ขนาดใต้ปุ่ม · Esc กลับโหมดเลือก', eraser: 'ลากผ่านเส้นลายมือเพื่อลบ · Ctrl+Z ย้อนกลับ', select: '', pan: 'ลากเพื่อเลื่อนผืนผ้าใบ', node: 'คลิกบนพื้นว่างเพื่อสร้างโหนด', link: 'คลิกโหนดต้นทาง แล้วคลิกโหนดปลายทาง (หรือลากจากโหนดไปโหนด)', note: 'คลิกเพื่อวางโน้ต', group: 'ลากเพื่อวาดกรอบจัดกลุ่ม' };
+  const hints = { lasso: 'วาดวงรอบลายมือหรือหัวข้อที่ต้องการเลือก · Shift/Ctrl = เลือกเพิ่ม', pen: 'ลากเพื่อขีดเขียน · เลือกสี/ขนาดใต้ปุ่ม · Esc กลับโหมดเลือก', eraser: 'ลากผ่านเส้นลายมือเพื่อลบ · Ctrl+Z ย้อนกลับ', select: '', pan: 'ลากเพื่อเลื่อนผืนผ้าใบ', node: 'คลิกบนพื้นว่างเพื่อสร้างโหนด', link: 'คลิกโหนดต้นทาง แล้วคลิกโหนดปลายทาง (หรือลากจากโหนดไปโหนด)', note: 'คลิกเพื่อวางโน้ต', group: 'ลากเพื่อวาดกรอบจัดกลุ่ม' };
   app.setHint(hints[tool] || '');
 };
 app.revealId = (id) => {
@@ -886,7 +887,7 @@ app.run = async (cmd) => {
       const ids = [...app.selection];
       const topicWithKids = ids.filter(id => app.graph.getNode(id)?.type === 'topic' && (app.tree.children.get(id) || []).length);
       if (topicWithKids.length && ids.every(id => app.graph.nodes.has(id))) { app.deleteBranch(ids); break; }
-      app.mutate(g => { for (const id of ids) { if (!g.removeNode(id)) g.removeLink(id); } });
+      app.mutate(g => { for (const id of ids) { if (!g.removeNode(id) && !g.removeLink(id)) g.removeStroke(id); } });
       if (app.opts.autoArrange && ids.some(id => !app.graph.nodes.has(id))) app.arrangeMindmap({ keepView: true });
       app.toast(`ลบ ${ids.length} รายการ`); break;
     }
@@ -1171,8 +1172,8 @@ $('#doc-title').addEventListener('change', (e) => app.setTitle(e.target.value));
 function updateStatus() {
   const { nodes, links } = app.graph.size;
   $('#status-counts').textContent = `โหนด ${nodes} · เส้น ${links}${app.hidden.size ? ` · ซ่อน ${app.hidden.size}` : ''}`;
-  const sn = [...app.selection].filter(id => app.graph.nodes.has(id)).length, sl = app.selection.size - sn;
-  $('#status-selection').textContent = app.selection.size ? `เลือก: ${sn} โหนด ${sl} เส้น` : '';
+  const sn = [...app.selection].filter(id => app.graph.nodes.has(id)).length, sl = [...app.selection].filter(id => app.graph.links.has(id)).length, sk = app.selection.size - sn - sl;
+  $('#status-selection').textContent = app.selection.size ? `เลือก: ${sn} โหนด ${sl} เส้น${sk ? ` ${sk} ลายมือ` : ''}` : '';
   $('#btn-undo').disabled = !app.history.canUndo(); $('#btn-redo').disabled = !app.history.canRedo();
 }
 app.onViewChanged = () => { $('#zoom-label').textContent = Math.round(app.view.k * 100) + '%'; app.closeInlineEditor(true); scheduleAutosave(); };
@@ -1308,7 +1309,7 @@ window.addEventListener('keydown', (e) => {
   if (key === '+' || key === '=') { const r = $('#canvas').getBoundingClientRect(); app.renderer.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2); return; }
   if (key === '-') { const r = $('#canvas').getBoundingClientRect(); app.renderer.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1 / 1.2); return; }
   const lower = key.toLowerCase();
-  const tools = { v: 'select', n: 'node', l: 'link', t: 'note', b: 'pen', x: 'eraser' };
+  const tools = { v: 'select', n: 'node', l: 'link', t: 'note', b: 'pen', x: 'eraser', o: 'lasso' };
   if (lower === 'h') { if (e.shiftKey) app.run('show-all'); else if (app.selection.size) app.run('focus'); else app.setTool('pan'); return; }
   if (lower === 'g') { app.run('add-group'); return; }
   if (tools[lower]) { app.setTool(tools[lower]); return; }

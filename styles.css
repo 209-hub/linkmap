@@ -120,6 +120,12 @@ body.dark .tool-check { color: #cbd5e1; }
 
 .node.topic .shape { filter: url(#shadow); }
 #layer-ink { pointer-events: none; }
+#canvas.tool-select #layer-ink .ink-g { pointer-events: stroke; cursor: move; }
+.ink-g.selected .ink { filter: drop-shadow(0 0 1.5px #2563eb) drop-shadow(0 0 1.5px #2563eb); }
+.ink-g.selected .ink-hit { stroke: rgba(37, 99, 235, .14); }
+.marquee.lasso { fill: rgba(37, 99, 235, .06); stroke-dasharray: 5 4; }
+#canvas.tool-lasso { cursor: crosshair; }
+#canvas.tool-lasso .node, #canvas.tool-lasso .link, #canvas.tool-lasso .group { pointer-events: none; }
 #canvas.tool-pen { cursor: crosshair; }
 #canvas.tool-eraser { cursor: cell; }
 #canvas.tool-pen .node, #canvas.tool-pen .link, #canvas.tool-pen .group, #canvas.tool-eraser .node, #canvas.tool-eraser .link, #canvas.tool-eraser .group { pointer-events: none; }

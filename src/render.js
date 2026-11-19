@@ -313,7 +313,15 @@ export class Renderer {
       const seenS = new Set();
       for (const s of graph.strokes || []) {
         seenS.add(s.id);
-        if (!this.inkEls.has(s.id)) this.inkEls.set(s.id, el('path', { class: 'ink', d: strokePath(s.points), stroke: s.color, 'stroke-width': s.width, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, this.gInk));
+        let ig = this.inkEls.get(s.id);
+        if (!ig) {
+          ig = el('g', { class: 'ink-g', 'data-id': s.id }, this.gInk);
+          const d0 = strokePath(s.points);
+          el('path', { class: 'ink-hit', d: d0, fill: 'none', stroke: 'transparent', 'stroke-width': s.width + 14, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ig);
+          el('path', { class: 'ink', d: d0, stroke: s.color, 'stroke-width': s.width, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ig);
+          this.inkEls.set(s.id, ig);
+        }
+        ig.classList.toggle('selected', selection.has(s.id));
       }
       for (const [id, p] of [...this.inkEls]) if (!seenS.has(id)) { p.remove(); this.inkEls.delete(id); }
     }
@@ -586,7 +594,29 @@ export class Renderer {
     if (nodeEl) return { kind: 'node', id: nodeEl.dataset.id, el: nodeEl, port: target.classList.contains('port'), handle: target.classList.contains('resize-handle'), collapse: !!target.closest('.collapse-btn'), add: !!target.closest('.add-btn') };
     const linkEl = target.closest?.('.link');
     if (linkEl) return { kind: 'link', id: linkEl.dataset.id, el: linkEl };
+    const inkEl = target.closest?.('.ink-g');
+    if (inkEl) return { kind: 'stroke', id: inkEl.dataset.id, el: inkEl };
     return null;
+  }
+
+  /** เริ่มลากย้ายสิ่งที่เลือก: โหนด (+สมาชิกของกรอบ) และลายมือที่เลือก */
+  _startMove(w) {
+    const g = this.app.graph;
+    const ids = new Set([...this.app.selection].filter(id => g.nodes.has(id)));
+    for (const id of [...ids]) {
+      const n = g.getNode(id);
+      if (n.type === 'group') for (const m of this.groupMembers(n)) ids.add(m);
+    }
+    const start = new Map();
+    for (const id of ids) { const n = g.getNode(id); start.set(id, { x: n.x, y: n.y }); }
+    const strokeStart = new Map();
+    for (const s of g.strokes) if (this.app.selection.has(s.id)) strokeStart.set(s.id, s.points.map(p => [p[0], p[1]]));
+    this.drag = { type: 'move', ids, start, strokeStart, x0: w.x, y0: w.y, snap: this.app.history.snapshot(g), moved: false };
+  }
+  _setStrokePath(s) {
+    const ig = this.inkEls.get(s.id); if (!ig) return;
+    const d = strokePath(s.points);
+    for (const p of ig.children) p.setAttribute('d', d);
   }
 
   _snap(v) { return this.app.opts.snap ? Math.round(v / 20) * 20 : v; }
@@ -615,7 +645,7 @@ export class Renderer {
     const now = performance.now();
     const last = this._lastDown;
     this._lastDown = { t: now, x: e.clientX, y: e.clientY, id: hit?.id ?? null };
-    if (e.button === 0 && this.app.tool !== 'pen' && this.app.tool !== 'eraser' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
+    if (e.button === 0 && this.app.tool !== 'pen' && this.app.tool !== 'eraser' && this.app.tool !== 'lasso' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
       this._lastDown = null;
       this._dblHandled = now;
       e.preventDefault(); // กันเบราว์เซอร์ย้ายโฟกัสไปจากช่องพิมพ์ที่กำลังจะเปิด
@@ -655,6 +685,12 @@ export class Renderer {
       return;
     }
 
+    if (tool === 'lasso') {
+      e.preventDefault();
+      const path = el('path', { class: 'marquee lasso' }, this.gOverlay);
+      this.drag = { type: 'lasso', pts: [[w.x, w.y]], path, add: e.shiftKey || e.ctrlKey || e.metaKey };
+      return;
+    }
     if (tool === 'node' && !hit) { this.app.createNodeAt(this._snap(w.x), this._snap(w.y)); return; }
     if (tool === 'note' && !hit) { this.app.createNote(this._snap(w.x), this._snap(w.y)); return; }
     if (tool === 'group' && !hit) {
@@ -678,6 +714,12 @@ export class Renderer {
       if (e.shiftKey || e.ctrlKey || e.metaKey) this.app.toggleSelect(hit.id); else this.app.select([hit.id]);
       return;
     }
+    if (hit.kind === 'stroke') {
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { this.app.toggleSelect(hit.id); return; }
+      if (!this.app.selection.has(hit.id)) this.app.select([hit.id]);
+      this._startMove(w);
+      return;
+    }
     // โหนด
     if (hit.collapse) { this.app.toggleCollapse(hit.id); return; }
     if (hit.add) { e.preventDefault(); this.app.select([hit.id]); this.app.addTopic('child'); return; }
@@ -697,15 +739,8 @@ export class Renderer {
     if (e.shiftKey) { this.app.selectBranch(hit.id, { add: e.ctrlKey || e.metaKey }); return; }
     if (e.ctrlKey || e.metaKey) { this.app.toggleSelect(hit.id); return; }
     if (!this.app.selection.has(hit.id)) this.app.select([hit.id]);
-    // เริ่มลาก: โหนดที่เลือกทั้งหมด + สมาชิกของกรอบที่เลือก
-    const ids = new Set([...this.app.selection].filter(id => this.app.graph.nodes.has(id)));
-    for (const id of [...ids]) {
-      const n = this.app.graph.getNode(id);
-      if (n.type === 'group') for (const m of this.groupMembers(n)) ids.add(m);
-    }
-    const start = new Map();
-    for (const id of ids) { const n = this.app.graph.getNode(id); start.set(id, { x: n.x, y: n.y }); }
-    this.drag = { type: 'move', ids, start, x0: w.x, y0: w.y, snap: this.app.history.snapshot(this.app.graph), moved: false };
+    // เริ่มลาก: โหนดที่เลือกทั้งหมด + สมาชิกของกรอบที่เลือก + ลายมือที่เลือก
+    this._startMove(w);
   }
 
   groupMembers(group) {
@@ -742,6 +777,13 @@ export class Renderer {
     const d = this.drag;
     if (!d) return;
     const w = this.screenToWorld(e.clientX, e.clientY);
+    if (d.type === 'lasso') {
+      const p = this.screenToWorld(e.clientX, e.clientY);
+      const last = d.pts[d.pts.length - 1];
+      if (Math.hypot(p.x - last[0], p.y - last[1]) >= 3 / this.app.view.k) d.pts.push([p.x, p.y]);
+      d.path.setAttribute('d', 'M' + d.pts.map(q => `${q[0]},${q[1]}`).join(' L') + ' Z');
+      return;
+    }
     if (d.type === 'ink') {
       const evs = e.getCoalescedEvents?.() || [];
       const list = evs.length ? evs : [e];
@@ -784,6 +826,11 @@ export class Renderer {
           if (this.app.isHidden(n.id)) continue;
           if (n.x >= x && n.x <= x + ww && n.y >= y && n.y <= y + hh) ids.push(n.id);
         }
+        for (const s of this.app.graph.strokes) { // ลายมือ: นับเมื่อจุดเกินครึ่งอยู่ในกรอบ
+          let inside = 0;
+          for (const p of s.points) if (p[0] >= x && p[0] <= x + ww && p[1] >= y && p[1] <= y + hh) inside++;
+          if (inside * 2 >= s.points.length) ids.push(s.id);
+        }
         this.app.select(ids, { add: d.add, silentPanels: true });
       }
       return;
@@ -796,6 +843,13 @@ export class Renderer {
       for (const id of d.ids) {
         const s = d.start.get(id); const n = this.app.graph.getNode(id);
         if (n) { n.x = s.x + dx; n.y = s.y + dy; }
+      }
+      if (d.strokeStart?.size) {
+        for (const s of this.app.graph.strokes) {
+          const orig = d.strokeStart.get(s.id); if (!orig) continue;
+          s.points = orig.map(p => [Math.round((p[0] + dx) * 10) / 10, Math.round((p[1] + dy) * 10) / 10]);
+          this._setStrokePath(s);
+        }
       }
       // ลากหัวข้อเดียวไปวางบนหัวข้ออื่น = ย้ายกิ่ง (reparent)
       if (d.ids.size === 1) {
@@ -852,6 +906,20 @@ export class Renderer {
     this.drag = null;
     this.svg.classList.remove('panning');
     try { this.svg.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (d.type === 'lasso') {
+      d.path.remove();
+      const poly = d.pts;
+      if (poly.length >= 3) {
+        const inPoly = (x, y) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi) c = !c; } return c; };
+        const ids = [];
+        for (const n of this.app.graph.nodes.values()) if (!this.app.isHidden(n.id) && n.type !== 'group' && inPoly(n.x, n.y)) ids.push(n.id);
+        for (const s of this.app.graph.strokes) { let k = 0; for (const p of s.points) if (inPoly(p[0], p[1])) k++; if (k * 2 >= s.points.length) ids.push(s.id); }
+        this.app.select(ids, { add: d.add });
+        if (ids.length) { this.app.setTool('select'); this.app.toast(`เลือกแล้ว ${ids.length} รายการ — ลากเพื่อย้าย หรือกด Delete เพื่อลบ`); }
+        else this.app.toast('ไม่มีอะไรอยู่ในวง');
+      }
+      return;
+    }
     if (d.type === 'ink') {
       d.path.remove();
       this.app.addStroke({ color: d.color, width: d.width, points: d.pts });
@@ -906,7 +974,7 @@ export class Renderer {
   }
 
   _onDblClick(e) {
-    if (this.app.tool === 'pen' || this.app.tool === 'eraser') return;
+    if (this.app.tool === 'pen' || this.app.tool === 'eraser' || this.app.tool === 'lasso') return;
     if (this._dblHandled && performance.now() - this._dblHandled < 600) return; // จัดการไปแล้วใน pointerdown
     const hit = this._hitTest(e.target);
     this._handleDouble(hit, this.screenToWorld(e.clientX, e.clientY));
@@ -928,7 +996,11 @@ export class Renderer {
     this.drag = null;
     if (d.rect) d.rect.remove();
     if (d.path) d.path.remove();
-    if (d.type === 'move') { for (const id of d.ids) { const s = d.start.get(id); const n = this.app.graph.getNode(id); if (n) { n.x = s.x; n.y = s.y; } } this.render(); }
+    if (d.type === 'move') {
+      for (const id of d.ids) { const s = d.start.get(id); const n = this.app.graph.getNode(id); if (n) { n.x = s.x; n.y = s.y; } }
+      if (d.strokeStart?.size) for (const s of this.app.graph.strokes) { const o = d.strokeStart.get(s.id); if (o) { s.points = o; this._setStrokePath(s); } }
+      this.render();
+    }
     if (d.type === 'erase' && d.removed) { try { this.app.graph.strokes = JSON.parse(d.snap).strokes || []; } catch { /* ignore */ } this.render(); }
     this.nodeEls.get(d.target)?.classList.remove('link-target');
     this.linkSource = null;

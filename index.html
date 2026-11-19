@@ -6,7 +6,7 @@
 <title>LinkMap — มายแมปจดเรียน จัดผังอัตโนมัติ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232563eb'/%3E%3Ccircle cx='24' cy='12' r='5' fill='%237c3aed'/%3E%3Ccircle cx='14' cy='25' r='5' fill='%23059669'/%3E%3Cpath d='M8 8L24 12L14 25Z' fill='none' stroke='%2394a3b8' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
-<meta name="app-version" content="2026-11-20.0238">
+<meta name="app-version" content="2026-11-20.0245">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
 <meta name="mobile-web-app-capable" content="yes">
@@ -179,6 +179,7 @@
       <button class="tool" data-tool="link" title="เชื่อมเส้น: คลิกโหนดต้นทางแล้วคลิกปลายทาง (L)"><span>⟶</span><small>เส้น</small></button>
       <button class="tool" data-tool="note" title="โน้ตติดกาว (T)"><span>🗒</span><small>โน้ต</small></button>
       <button class="tool" data-tool="group" title="กรอบจัดกลุ่ม: ลากเพื่อวาดกรอบ (G)"><span>▢</span><small>กรอบ</small></button>
+      <button class="tool" data-tool="lasso" title="วงเลือก: วาดวงรอบลายมือ/หัวข้อเพื่อเลือก แล้วลากย้ายหรือลบ (O)"><span>➰</span><small>วงเลือก</small></button>
       <button class="tool" data-tool="pen" title="ปากกา: ขีดเขียนอิสระบนผืนผ้าใบ (B)"><span>✏️</span><small>ปากกา</small></button>
       <button class="tool" data-tool="eraser" title="ยางลบ: ลากผ่านเส้นลายมือเพื่อลบ (X)"><span>🧽</span><small>ยางลบ</small></button>
       <div id="pen-opts" class="pen-opts hidden"></div>
@@ -382,7 +383,7 @@
           <li><b>โหมดจดเรียน:</b> <kbd>Enter</kbd> หัวข้อถัดไป (พี่น้อง) · <kbd>Tab</kbd> หัวข้อย่อย · พิมพ์ตัวอักษรบนหัวข้อที่เลือกเพื่อแก้ทันที · <kbd>Ctrl+L</kbd> จัดผังมายแมป</li>
           <li><b>✨ เอไอ:</b> <kbd>Ctrl+J</kbd> สรุปเอกสารเป็นมายแมป — แอปคัดลอกคำสั่งให้ คุณวางใน Gemini/ChatGPT/Claude พร้อมแนบ PDF แล้วนำคำตอบ (JSON หรือโครงร่าง) มาวางกลับ ไม่ต้องใช้ API</li>
           <li><b>💾 บันทึกลงเครื่อง:</b> เมนู ไฟล์ › เลือกโฟลเดอร์บันทึกอัตโนมัติ (Chrome/Edge บนคอม) — ทุกการแก้ไขจะถูกเขียนเป็นไฟล์ .linkmap.json ในโฟลเดอร์นั้น · <b>🔁 ตรวจคำซ้ำ:</b> ปุ่มที่แถบซ้าย เชื่อมเส้นหรือเมิร์จหัวข้อชื่อเดียวกัน · ลากไฟล์รูปมาวางบนผืนผ้าใบได้</li>
-          <li><b>✏️ ปากกา:</b> <kbd>B</kbd> ปากกา · <kbd>X</kbd> ยางลบ (ลากผ่านเส้นเพื่อลบ) · เลือกสี/ขนาดใต้ปุ่ม · ลายมือเป็นชั้นหมึกแยก ไม่ถูกจัดผัง · ใช้สไตลัส: ปากกาเขียน นิ้วเลื่อน · <b>รูป:</b> เลือกรูปแล้วลากจุดมุมขวาล่างเพื่อย่อ/ขยาย</li>
+          <li><b>✏️ ปากกา:</b> <kbd>B</kbd> ปากกา · <kbd>X</kbd> ยางลบ (ลากผ่านเส้นเพื่อลบ) · เลือกสี/ขนาดใต้ปุ่ม · <kbd>O</kbd> วงเลือก (วาดวงรอบลายมือ/หัวข้อ แล้วลากย้ายหรือ Delete) · คลิกเส้นลายมือเพื่อเลือก · ลายมือเป็นชั้นหมึกแยก ไม่ถูกจัดผัง · ใช้สไตลัส: ปากกาเขียน นิ้วเลื่อน · <b>รูป:</b> เลือกรูปแล้วลากจุดมุมขวาล่างเพื่อย่อ/ขยาย</li>
           <li><b>🏠 เวิร์กสเปซ:</b> คลิกโลโก้ LinkMap มุมซ้ายบน เพื่อดูผังทั้งหมด สร้างผังใหม่ เปิดงานเก่า เปลี่ยนชื่อ ทำสำเนา หรือลบ — ทุกผังบันทึกอัตโนมัติ</li>
           <li><b>ตกแต่ง:</b> <kbd>Ctrl+B</kbd> ตัวหนา · <kbd>Ctrl+I</kbd> ตัวเอียง · <kbd>Ctrl+V</kbd> วางรูปลงหัวข้อ (หรือวางข้อความแบบรายการเพื่อสร้างกิ่ง) · ธีมสี/ธีมมืดที่เมนูมุมมอง · <kbd>Ctrl+P</kbd> ส่งออก PDF</li>
           <li><b>มายแมป:</b> <kbd>←↑↓→</kbd> เดินไปหัวข้อข้างเคียง · <kbd>/</kbd> ยุบ/ขยายกิ่ง · <kbd>Ctrl+↑/↓</kbd> สลับลำดับ · <kbd>Delete</kbd> ลบทั้งกิ่ง · <kbd>Shift+Del</kbd> ลบเฉพาะหัวข้อ · <kbd>Home</kbd> ไปหัวข้อหลัก · ลากหัวข้อไปวางบนหัวข้ออื่น = ย้ายกิ่ง · <kbd>Ctrl+M</kbd> นำเข้าโครงร่างข้อความ</li>
@@ -419,6 +420,6 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
-<script type="module" src="src/main.js?v=2026-11-20.0238"></script>
+<script type="module" src="src/main.js?v=2026-11-20.0245"></script>
 </body>
 </html>
