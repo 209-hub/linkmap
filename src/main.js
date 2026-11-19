@@ -514,7 +514,18 @@ app.fsOpenFile = async (name) => {
 };
 app.fsForget = async () => { await forgetFolder(); app.fs.dir = null; app.fs.granted = false; fsBanner(''); app.fsStatus('บันทึกอัตโนมัติในเบราว์เซอร์'); app.toast('เลิกบันทึกลงโฟลเดอร์แล้ว (ไฟล์เดิมยังอยู่ในเครื่อง)'); };
 
-$('#file-image')?.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) app.setImageFromFile(f); e.target.value = ''; });
+$('#file-image')?.addEventListener('change', async (e) => {
+  // เลือกได้หลายรูป: รูปแรกเข้าหัวข้อที่เลือกอยู่ (ถ้ามี) รูปที่เหลือสร้างเป็นหัวข้อรูปใหม่เรียงกัน
+  const files = [...e.target.files].filter(f => f.type.startsWith('image/'));
+  e.target.value = '';
+  if (!files.length) return;
+  const base = centerWorld();
+  for (let i = 0; i < files.length; i++) {
+    if (i > 0) app.select([]);
+    await app.placeImage(files[i], i === 0 ? null : { x: base.x + (i % 4) * 250, y: base.y + 140 + Math.floor(i / 4) * 200 });
+  }
+  if (files.length > 1) app.toast(`เพิ่มรูปแล้ว ${files.length} รูป`);
+});
 
 app.setMark = (mark) => {
   const ids = [...app.selection].filter(id => app.graph.nodes.has(id));

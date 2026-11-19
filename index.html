@@ -6,7 +6,7 @@
 <title>LinkMap — มายแมปจดเรียน จัดผังอัตโนมัติ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232563eb'/%3E%3Ccircle cx='24' cy='12' r='5' fill='%237c3aed'/%3E%3Ccircle cx='14' cy='25' r='5' fill='%23059669'/%3E%3Cpath d='M8 8L24 12L14 25Z' fill='none' stroke='%2394a3b8' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
-<meta name="app-version" content="2026-11-20.0220">
+<meta name="app-version" content="2026-11-20.0226">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
 <meta name="mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
           <button data-cmd="add-child">จดหัวข้อย่อย (ลูก) <kbd>Tab</kbd></button>
           <button data-cmd="bold">ตัวหนา <kbd>Ctrl+B</kbd></button>
           <button data-cmd="italic">ตัวเอียง <kbd>Ctrl+I</kbd></button>
-          <button data-cmd="image-add">ใส่รูปภาพในหัวข้อ…</button>
+          <button data-cmd="image-add">เพิ่มรูปภาพจากเครื่อง/อัลบั้ม…</button>
           <hr>
           <button data-cmd="toggle-collapse">ยุบ/ขยายกิ่ง <kbd>/</kbd></button>
           <button data-cmd="expand-all">ขยายทุกกิ่ง</button>
@@ -180,6 +180,7 @@
       <div class="tool-sep"></div>
       <div id="type-palette" class="type-palette" title="ประเภทของโหนดใหม่"></div>
       <div class="tool-sep"></div>
+      <button class="tool tool-action" data-cmd="image-add" title="เพิ่มรูปภาพจากเครื่อง/อัลบั้ม (เลือกได้หลายรูป) — ใส่ในหัวข้อที่เลือก หรือสร้างหัวข้อรูปใหม่"><span>🖼</span><small>รูปภาพ</small></button>
       <button class="tool tool-action" data-cmd="dedupe" title="ตรวจหัวข้อที่ชื่อซ้ำกัน แล้วเชื่อมเส้นหรือเมิร์จ"><span>🔁</span><small>คำซ้ำ</small></button>
       <button class="tool" id="tb-panel" title="แสดง/ซ่อนแผงคุณสมบัติด้านขวา (\)"><span>▥</span><small>แผงขวา</small></button>
     </aside>
@@ -239,7 +240,7 @@
 
 <input type="file" id="file-json" accept=".json,application/json" class="hidden">
 <input type="file" id="file-csv" accept=".csv,.txt,.tsv,text/csv" class="hidden">
-<input type="file" id="file-image" accept="image/*" class="hidden">
+<input type="file" id="file-image" accept="image/*" multiple class="hidden">
 <input type="file" id="file-ai" accept=".json,.md,.txt,application/json,text/markdown,text/plain" class="hidden">
 
 <!-- กล่องโต้ตอบนำเข้า CSV -->
@@ -392,6 +393,6 @@
 </dialog>
 
 <div id="toast" class="toast hidden"></div>
-<script type="module" src="src/main.js?v=2026-11-20.0220"></script>
+<script type="module" src="src/main.js?v=2026-11-20.0226"></script>
 </body>
 </html>
