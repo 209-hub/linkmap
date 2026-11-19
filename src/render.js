@@ -27,11 +27,25 @@ export function topicBox(node) {
   let h = (lines.length * 18 + 16) * scale;
   let img = null;
   if (node.image && node.imageW && node.imageH) {
-    const iw = Math.min(IMAGE_MAX_W, node.imageW), ih = node.imageH * (iw / node.imageW);
+    const iw = node.imgW || Math.min(IMAGE_MAX_W, node.imageW), ih = node.imageH * (iw / node.imageW);
     img = { w: iw, h: ih };
+    if (node.imageOnly) return { w: iw, h: ih, lines: [], scale: 1, img, imageOnly: true }; // โหนดรูปล้วน: ขนาดโหนด = ขนาดรูป
     w = Math.max(w, iw + 20); h += ih + 8;
   }
   return { w, h, lines, scale, img };
+}
+
+/** เส้นลายมือแบบเรียบ (quadratic ผ่านจุดกึ่งกลาง) */
+export function strokePath(pts) {
+  if (!pts.length) return '';
+  if (pts.length === 1) return `M${pts[0][0]},${pts[0][1]} l0.01,0`;
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+    d += ` Q${pts[i][0]},${pts[i][1]} ${mx.toFixed(1)},${my.toFixed(1)}`;
+  }
+  const l = pts[pts.length - 1];
+  return d + ` L${l[0]},${l[1]}`;
 }
 export function nodeBox(node) {
   if (node.type === 'note') return { w: node.w || NOTE_DEFAULT.w, h: node.h || NOTE_DEFAULT.h };
@@ -154,6 +168,8 @@ export class Renderer {
     this.gLinks = svg.querySelector('#layer-links');
     this.gNodes = svg.querySelector('#layer-nodes');
     this.gOverlay = svg.querySelector('#layer-overlay');
+    this.gInk = svg.querySelector('#layer-ink');
+    this.inkEls = new Map();
     this.gridBg = svg.querySelector('#grid-bg');
     this.nodeEls = new Map();
     this.linkEls = new Map();
@@ -207,8 +223,10 @@ export class Renderer {
   }
   contentBounds(ids = null) {
     const nodes = [...this.app.graph.nodes.values()].filter(n => !this.app.isHidden(n.id) && (!ids || ids.has(n.id)));
-    if (!nodes.length) return null;
+    const strokes = ids ? [] : (this.app.graph.strokes || []);
+    if (!nodes.length && !strokes.length) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const s of strokes) for (const p of s.points) { minX = Math.min(minX, p[0] - 6); maxX = Math.max(maxX, p[0] + 6); minY = Math.min(minY, p[1] - 6); maxY = Math.max(maxY, p[1] + 6); }
     for (const n of nodes) {
       const box = nodeBox(n); const hw = box ? box.w / 2 : 40, hh = box ? box.h / 2 : 45;
       minX = Math.min(minX, n.x - hw); maxX = Math.max(maxX, n.x + hw);
@@ -290,6 +308,15 @@ export class Renderer {
       this._updateLinkEl(g, l, a, b, pi, selection.has(l.id), dimmed && (dimmed.has(a.id) || dimmed.has(b.id)));
     }
     for (const [id, g] of [...this.linkEls]) if (!seenL.has(id)) { g.remove(); this.linkEls.delete(id); }
+    // ---- ลายมือ ----
+    if (this.gInk) {
+      const seenS = new Set();
+      for (const s of graph.strokes || []) {
+        seenS.add(s.id);
+        if (!this.inkEls.has(s.id)) this.inkEls.set(s.id, el('path', { class: 'ink', d: strokePath(s.points), stroke: s.color, 'stroke-width': s.width, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, this.gInk));
+      }
+      for (const [id, p] of [...this.inkEls]) if (!seenS.has(id)) { p.remove(); this.inkEls.delete(id); }
+    }
     this.app.onRendered?.();
   }
 
@@ -341,6 +368,7 @@ export class Renderer {
       el('text', { class: 'notes-ind' }, g);
       el('image', { class: 'topic-img', preserveAspectRatio: 'xMidYMid meet' }, g);
       el('line', { class: 'underline' }, g);
+      el('rect', { class: 'resize-handle img-handle', width: 14, height: 14, rx: 3 }, g);
       this._addPlusBtn(g);
       this.gNodes.appendChild(g);
       return g;
@@ -422,8 +450,15 @@ export class Renderer {
       tb.lines.forEach((ln, i) => { const ts = el('tspan', { x: 0, y: -tb.h / 2 + imgH + (12 + 5) * tb.scale + i * 18 * tb.scale }, text); ts.textContent = ln; });
       const rootFilled = isRoot && shape !== 'underline';
       setAttrs(text, { fill: rootFilled ? (theme.dark ? '#0f172a' : '#fff') : theme.text, 'font-size': fs, 'font-weight': n.bold || n.level <= 1 ? 700 : 500, 'font-style': n.italic ? 'italic' : 'normal' });
-      if (tb.img) { img.style.display = ''; setAttrs(img, { href: n.image, x: -tb.img.w / 2, y: -tb.h / 2 + 6, width: tb.img.w, height: tb.img.h }); }
+      const imgTop = -tb.h / 2 + (tb.imageOnly ? 0 : 6);
+      if (tb.img) { img.style.display = ''; setAttrs(img, { href: n.image, x: -tb.img.w / 2, y: imgTop, width: tb.img.w, height: tb.img.h }); }
       else { img.style.display = 'none'; img.removeAttribute('href'); }
+      const imgHandle = g.querySelector('.img-handle');
+      if (tb.img) { imgHandle.style.display = ''; setAttrs(imgHandle, { x: tb.img.w / 2 - 8, y: imgTop + tb.img.h - 8 }); } else imgHandle.style.display = 'none';
+      if (tb.imageOnly) { // รูปล้วน: ไม่มีพื้นหลัง/เส้นขอบ/เงา
+        rect.style.fill = 'transparent'; rect.style.strokeWidth = 0; rect.style.filter = 'none'; uline.style.display = 'none';
+        rect.setAttribute('rx', 4); ring.setAttribute('rx', 6);
+      } else rect.style.filter = '';
       const bd = this.app.visual.badge?.get(n.id);
       if (bd != null) { badgeBg.style.display = ''; badge.style.display = ''; setAttrs(badgeBg, { cx: tb.w / 2, cy: -tb.h / 2, fill: paletteColor(bd) }); badge.textContent = String(bd); setAttrs(badge, { x: tb.w / 2, y: -tb.h / 2 }); }
       else { badgeBg.style.display = 'none'; badge.style.display = 'none'; }
@@ -580,7 +615,7 @@ export class Renderer {
     const now = performance.now();
     const last = this._lastDown;
     this._lastDown = { t: now, x: e.clientX, y: e.clientY, id: hit?.id ?? null };
-    if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
+    if (e.button === 0 && this.app.tool !== 'pen' && this.app.tool !== 'eraser' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && last && now - last.t < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6 && last.id === (hit?.id ?? null)) {
       this._lastDown = null;
       this._dblHandled = now;
       e.preventDefault(); // กันเบราว์เซอร์ย้ายโฟกัสไปจากช่องพิมพ์ที่กำลังจะเปิด
@@ -598,6 +633,27 @@ export class Renderer {
     }
     if (e.button !== 0) return;
     try { this.svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+
+    if (tool === 'pen' || tool === 'eraser') {
+      if (e.pointerType === 'pen') this.app.penSeen = true;
+      // เมื่อมีปากกาสไตลัส: นิ้วใช้เลื่อนผืนผ้าใบ ปากกาใช้เขียน (กันฝ่ามือ)
+      if (e.pointerType === 'touch' && this.app.penSeen) {
+        this.drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: this.app.view.x, vy: this.app.view.y };
+        this.svg.classList.add('panning');
+        return;
+      }
+      e.preventDefault();
+      if (tool === 'pen') {
+        const pen = this.app.pen || { color: '#111827', width: 3 };
+        const path = el('path', { class: 'ink live', stroke: pen.color, 'stroke-width': pen.width, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, this.gInk);
+        this.drag = { type: 'ink', pts: [[w.x, w.y]], path, color: pen.color, width: pen.width };
+        path.setAttribute('d', strokePath(this.drag.pts));
+      } else {
+        this.drag = { type: 'erase', snap: this.app.history.snapshot(this.app.graph), removed: 0, last: { x: w.x, y: w.y } };
+        this._eraseAt(w);
+      }
+      return;
+    }
 
     if (tool === 'node' && !hit) { this.app.createNodeAt(this._snap(w.x), this._snap(w.y)); return; }
     if (tool === 'note' && !hit) { this.app.createNote(this._snap(w.x), this._snap(w.y)); return; }
@@ -628,6 +684,12 @@ export class Renderer {
     if (hit.port || e.altKey) { this._startLinkDrag(hit.id, e); return; }
     if (hit.handle) {
       const n = this.app.graph.getNode(hit.id); const box = nodeBox(n);
+      if (n.type === 'topic') {
+        const tb = topicBox(n);
+        if (!this.app.selection.has(n.id)) this.app.select([n.id]);
+        this.drag = { type: 'imgresize', id: n.id, w0: tb.img ? tb.img.w : 100, x0: w.x, snap: this.app.history.snapshot(this.app.graph), moved: false };
+        return;
+      }
       this.drag = { type: 'resize', id: hit.id, w0: box.w, h0: box.h, cx0: n.x, cy0: n.y, x0: w.x, y0: w.y, snap: this.app.history.snapshot(this.app.graph), moved: false };
       return;
     }
@@ -680,6 +742,35 @@ export class Renderer {
     const d = this.drag;
     if (!d) return;
     const w = this.screenToWorld(e.clientX, e.clientY);
+    if (d.type === 'ink') {
+      const evs = e.getCoalescedEvents?.() || [];
+      const list = evs.length ? evs : [e];
+      const minD = 1.2 / this.app.view.k;
+      for (const ev of list) {
+        const p = this.screenToWorld(ev.clientX, ev.clientY);
+        const last = d.pts[d.pts.length - 1];
+        if (Math.hypot(p.x - last[0], p.y - last[1]) >= minD) d.pts.push([p.x, p.y]);
+      }
+      d.path.setAttribute('d', strokePath(d.pts));
+      return;
+    }
+    if (d.type === 'erase') {
+      // ลบตามแนวที่ลากผ่าน (แทรกจุดระหว่างตำแหน่งก่อนหน้า เผื่อปัดเร็ว)
+      const p = this.screenToWorld(e.clientX, e.clientY);
+      const from = d.last || p;
+      const step = 6 / this.app.view.k;
+      const n = Math.max(1, Math.ceil(Math.hypot(p.x - from.x, p.y - from.y) / step));
+      for (let i = 1; i <= n; i++) this._eraseAt({ x: from.x + (p.x - from.x) * i / n, y: from.y + (p.y - from.y) * i / n });
+      d.last = p;
+      return;
+    }
+    if (d.type === 'imgresize') {
+      const n = this.app.graph.getNode(d.id); if (!n) return;
+      const p = this.screenToWorld(e.clientX, e.clientY);
+      d.moved = true;
+      n.imgW = Math.round(Math.max(40, Math.min(2400, d.w0 + (p.x - d.x0) * 2))); // โหนดยึดจุดกึ่งกลาง จึงขยาย 2 เท่าของระยะลาก
+      this.render(); return;
+    }
     if (d.type === 'pan') {
       this.app.view.x = d.vx + (e.clientX - d.sx); this.app.view.y = d.vy + (e.clientY - d.sy);
       this.applyView(); return;
@@ -761,6 +852,19 @@ export class Renderer {
     this.drag = null;
     this.svg.classList.remove('panning');
     try { this.svg.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    if (d.type === 'ink') {
+      d.path.remove();
+      this.app.addStroke({ color: d.color, width: d.width, points: d.pts });
+      return;
+    }
+    if (d.type === 'erase') {
+      if (d.removed) { this.app.history.pushSnapshot(d.snap); this.app.changed({ structural: false }); }
+      return;
+    }
+    if (d.type === 'imgresize') {
+      if (d.moved) { this.app.history.pushSnapshot(d.snap); this.app.changed({ structural: false }); }
+      return;
+    }
     if (d.type === 'marquee') { d.rect.remove(); this.app.select([...this.app.selection]); return; }
     if (d.type === 'groupdraw') {
       d.rect.remove();
@@ -802,6 +906,7 @@ export class Renderer {
   }
 
   _onDblClick(e) {
+    if (this.app.tool === 'pen' || this.app.tool === 'eraser') return;
     if (this._dblHandled && performance.now() - this._dblHandled < 600) return; // จัดการไปแล้วใน pointerdown
     const hit = this._hitTest(e.target);
     this._handleDouble(hit, this.screenToWorld(e.clientX, e.clientY));
@@ -824,8 +929,28 @@ export class Renderer {
     if (d.rect) d.rect.remove();
     if (d.path) d.path.remove();
     if (d.type === 'move') { for (const id of d.ids) { const s = d.start.get(id); const n = this.app.graph.getNode(id); if (n) { n.x = s.x; n.y = s.y; } } this.render(); }
+    if (d.type === 'erase' && d.removed) { try { this.app.graph.strokes = JSON.parse(d.snap).strokes || []; } catch { /* ignore */ } this.render(); }
     this.nodeEls.get(d.target)?.classList.remove('link-target');
     this.linkSource = null;
     this.app.setHint('');
+  }
+
+  /** ยางลบ: ลบทั้งเส้นที่อยู่ใต้จุด w (รัศมีคงที่บนจอ) */
+  _eraseAt(w) {
+    const r = 12 / this.app.view.k;
+    const strokes = this.app.graph.strokes;
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      const rr = r + s.width / 2;
+      let hitIt = false;
+      for (let j = 0; j < s.points.length && !hitIt; j++) {
+        const a = s.points[j], b = s.points[j + 1] || a;
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const len2 = dx * dx + dy * dy;
+        const t = len2 ? Math.max(0, Math.min(1, ((w.x - a[0]) * dx + (w.y - a[1]) * dy) / len2)) : 0;
+        if (Math.hypot(w.x - (a[0] + t * dx), w.y - (a[1] + t * dy)) <= rr) hitIt = true;
+      }
+      if (hitIt) { strokes.splice(i, 1); this.inkEls.get(s.id)?.remove(); this.inkEls.delete(s.id); if (this.drag) this.drag.removed++; }
+    }
   }
 }

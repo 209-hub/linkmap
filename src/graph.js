@@ -16,6 +16,8 @@ export const DEFAULT_NODE = {
   shape: null,      // รูปทรงหัวข้อ: rounded | rect | pill | underline (null = ตามระดับ)
   bold: false, italic: false,
   image: null, imageW: 0, imageH: 0, // รูปภาพ (data URL) ในหัวข้อ
+  imgW: null,        // ความกว้างที่แสดงของรูป (null = ค่าเริ่มต้น)
+  imageOnly: false,  // โหนดรูปล้วน: ไม่มีกรอบ/ข้อความ ขนาดโหนด = ขนาดรูป
 };
 
 export const DEFAULT_LINK = {
@@ -28,6 +30,7 @@ export class Graph {
     this.nodes = new Map();
     this.links = new Map();
     this.meta = { title: 'ผังใหม่', created: new Date().toISOString() };
+    this.strokes = []; // ลายมือ (ชั้นหมึก): [{ id, color, width, points: [[x,y],...] }] พิกัดโลก ไม่ใช่โหนด
   }
 
   // ---------- โหนด ----------
@@ -86,6 +89,14 @@ export class Graph {
   }
 
   removeLink(id) { return this.links.delete(id); }
+
+  // ---------- ลายมือ ----------
+  addStroke(data) {
+    const s = { id: data.id || uid('s'), color: data.color || '#111827', width: Number(data.width) || 3, points: data.points.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]) };
+    this.strokes.push(s);
+    return s;
+  }
+  removeStroke(id) { const i = this.strokes.findIndex(s => s.id === id); if (i < 0) return false; this.strokes.splice(i, 1); return true; }
   getLink(id) { return this.links.get(id); }
 
   linksOf(nodeId) {
@@ -142,6 +153,7 @@ export class Graph {
       meta: { ...this.meta, saved: new Date().toISOString() },
       nodes: [...this.nodes.values()].map(({ level, branchColor, ...n }) => ({ ...n, attrs: { ...n.attrs } })),
       links: [...this.links.values()].map(l => ({ ...l, attrs: { ...l.attrs } })),
+      strokes: this.strokes.map(s => ({ ...s, points: s.points.map(p => [p[0], p[1]]) })),
     };
   }
 
@@ -151,6 +163,7 @@ export class Graph {
     }
     const g = new Graph();
     g.meta = { ...g.meta, ...(obj.meta || {}) };
+    if (Array.isArray(obj.strokes)) g.strokes = obj.strokes.filter(s => s && Array.isArray(s.points) && s.points.length).map(s => ({ id: s.id || uid('s'), color: s.color || '#111827', width: Number(s.width) || 3, points: s.points.map(p => [Number(p[0]), Number(p[1])]) }));
     for (const n of obj.nodes) g.addNode(n);
     for (const l of obj.links) {
       if (g.nodes.has(l.from) && g.nodes.has(l.to)) g.addLink(l);

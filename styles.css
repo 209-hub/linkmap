@@ -119,6 +119,15 @@ body.dark .tool-check { color: #cbd5e1; }
 .node.link-target .shape { stroke: var(--accent) !important; stroke-width: 5; }
 
 .node.topic .shape { filter: url(#shadow); }
+#layer-ink { pointer-events: none; }
+#canvas.tool-pen { cursor: crosshair; }
+#canvas.tool-eraser { cursor: cell; }
+#canvas.tool-pen .node, #canvas.tool-pen .link, #canvas.tool-pen .group, #canvas.tool-eraser .node, #canvas.tool-eraser .link, #canvas.tool-eraser .group { pointer-events: none; }
+.pen-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px 0; }
+.pen-opts button { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; padding: 0; display: flex; align-items: center; justify-content: center; background: #fff; }
+.pen-opts button.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.pen-opts .w-dot { background: #334155; border-radius: 50%; display: block; }
+.img-handle { cursor: nwse-resize; }
 .add-btn { cursor: pointer; opacity: 0; transition: opacity .12s; }
 .node:hover .add-btn, .node.selected .add-btn { opacity: 1; }
 .add-btn .add-hit { fill: transparent; }

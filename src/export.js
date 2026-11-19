@@ -45,7 +45,7 @@ export function buildExportSVG(renderer, { pad = 40, background = null } = {}) {
   const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   bg.setAttribute('x', x); bg.setAttribute('y', y); bg.setAttribute('width', w); bg.setAttribute('height', h); bg.setAttribute('fill', background);
   svg.appendChild(bg);
-  for (const layerId of ['layer-groups', 'layer-links', 'layer-nodes']) {
+  for (const layerId of ['layer-groups', 'layer-links', 'layer-nodes', 'layer-ink']) {
     const layer = src.querySelector('#' + layerId).cloneNode(true);
     layer.querySelectorAll('.port, .resize-handle, .sel-ring, .sel-ring-rect, .hit, .add-btn').forEach(e => e.remove());
     layer.querySelectorAll('.selected').forEach(e => e.classList.remove('selected'));

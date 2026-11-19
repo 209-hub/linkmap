@@ -152,13 +152,31 @@ app.freeSpotNear = (parent, relation, sel) => {
   }
   return { x: Math.round(x), y: Math.round(y) };
 };
+// ---------------------------------------------------------------- ปากกา (ชั้นหมึก)
+app.pen = { color: '#111827', width: 3 };
+app.penSeen = false;
+app.addStroke = (data) => { if (!data.points?.length) return; app.history.push(app.graph); app.graph.addStroke(data); app.changed({ structural: false }); };
+const PEN_COLORS = ['#111827', '#dc2626', '#2563eb', '#059669', '#f59e0b', '#ffffff'];
+const PEN_WIDTHS = [2, 4, 8];
+function initPenOpts() {
+  const box = $('#pen-opts'); if (!box) return;
+  try { const o = JSON.parse(localStorage.getItem('linkmap.pen') || 'null'); if (o) Object.assign(app.pen, o); } catch { /* ignore */ }
+  const save = () => { try { localStorage.setItem('linkmap.pen', JSON.stringify(app.pen)); } catch { /* ignore */ } };
+  const draw = () => {
+    box.innerHTML = '';
+    for (const c of PEN_COLORS) { const b = document.createElement('button'); b.style.background = c; b.style.borderColor = c === '#ffffff' ? '#cbd5e1' : 'transparent'; b.title = 'สีปากกา'; if (app.pen.color === c) b.classList.add('active'); b.onclick = () => { app.pen.color = c; save(); draw(); }; box.appendChild(b); }
+    for (const w of PEN_WIDTHS) { const b = document.createElement('button'); b.title = `ขนาดเส้น ${w}`; b.innerHTML = `<span class="w-dot" style="width:${w + 3}px;height:${w + 3}px"></span>`; if (app.pen.width === w) b.classList.add('active'); b.onclick = () => { app.pen.width = w; save(); draw(); }; box.appendChild(b); }
+  };
+  draw();
+}
 app.setTool = (tool) => {
   app.tool = tool;
   document.querySelectorAll('#toolbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
   const svg = $('#canvas');
   svg.className.baseVal = `tool-${tool}`;
   app.renderer.linkSource = null;
-  const hints = { select: '', pan: 'ลากเพื่อเลื่อนผืนผ้าใบ', node: 'คลิกบนพื้นว่างเพื่อสร้างโหนด', link: 'คลิกโหนดต้นทาง แล้วคลิกโหนดปลายทาง (หรือลากจากโหนดไปโหนด)', note: 'คลิกเพื่อวางโน้ต', group: 'ลากเพื่อวาดกรอบจัดกลุ่ม' };
+  const po = $('#pen-opts'); if (po) po.classList.toggle('hidden', tool !== 'pen');
+  const hints = { pen: 'ลากเพื่อขีดเขียน · เลือกสี/ขนาดใต้ปุ่ม · Esc กลับโหมดเลือก', eraser: 'ลากผ่านเส้นลายมือเพื่อลบ · Ctrl+Z ย้อนกลับ', select: '', pan: 'ลากเพื่อเลื่อนผืนผ้าใบ', node: 'คลิกบนพื้นว่างเพื่อสร้างโหนด', link: 'คลิกโหนดต้นทาง แล้วคลิกโหนดปลายทาง (หรือลากจากโหนดไปโหนด)', note: 'คลิกเพื่อวางโน้ต', group: 'ลากเพื่อวาดกรอบจัดกลุ่ม' };
   app.setHint(hints[tool] || '');
 };
 app.revealId = (id) => {
@@ -324,12 +342,17 @@ app.setImageFromFile = async (file, targetId = null) => {
   const bitmapUrl = URL.createObjectURL(file);
   try {
     const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('อ่านรูปไม่ได้')); im.src = bitmapUrl; });
-    const maxW = IMAGE_MAX_W * 2; // เก็บความละเอียด 2 เท่าของที่แสดง
+    const maxW = 1200; // เก็บความละเอียดพอสำหรับขยายรูปบนผัง
     const s = Math.min(1, maxW / img.naturalWidth);
     const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     const isPhoto = file.type === 'image/jpeg';
-    const dataUrl = isPhoto ? c.toDataURL('image/jpeg', 0.85) : c.toDataURL('image/png');
+    let dataUrl = isPhoto ? c.toDataURL('image/jpeg', 0.85) : c.toDataURL('image/png');
+    if (!isPhoto && dataUrl.length > 700000) { // PNG ใหญ่เกิน → แปลงเป็น JPEG บนพื้นขาวเพื่อประหยัดพื้นที่
+      const c2 = document.createElement('canvas'); c2.width = c.width; c2.height = c.height;
+      const x2 = c2.getContext('2d'); x2.fillStyle = '#fff'; x2.fillRect(0, 0, c2.width, c2.height); x2.drawImage(c, 0, 0);
+      dataUrl = c2.toDataURL('image/jpeg', 0.85);
+    }
     app.mutate(g => g.updateNode(id, { image: dataUrl, imageW: c.width, imageH: c.height }));
     if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
     app.toast('ใส่รูปแล้ว');
@@ -400,7 +423,7 @@ app.placeImage = async (file, pt = null, targetId = null) => {
       for (let i = 0; i < 30 && hit(); i++) c.y += 120;
     }
     let node;
-    app.mutate(g => { node = g.addNode({ label: (file.name || 'รูปภาพ').replace(/\.[a-z0-9]+$/i, '') || 'รูปภาพ', type: 'topic', x: Math.round(c.x), y: Math.round(c.y) }); });
+    app.mutate(g => { node = g.addNode({ label: (file.name || 'รูปภาพ').replace(/\.[a-z0-9]+$/i, '') || 'รูปภาพ', type: 'topic', imageOnly: true, x: Math.round(c.x), y: Math.round(c.y) }); });
     id = node.id; app.select([id]);
   }
   await app.setImageFromFile(file, id);
@@ -880,7 +903,14 @@ app.run = async (cmd) => {
     case 'bold': app.toggleStyle('bold'); break;
     case 'italic': app.toggleStyle('italic'); break;
     case 'image-add': $('#file-image').click(); break;
-    case 'image-remove': app.removeImage(); break;
+    case 'image-remove': app.setTopicStyle({ image: null, imageW: 0, imageH: 0, imgW: null, imageOnly: false }); break;
+    case 'image-only': app.toggleStyle('imageOnly'); break;
+    case 'image-reset-size': app.setTopicStyle({ imgW: null }); break;
+    case 'ink-clear': {
+      if (!app.graph.strokes.length) { app.toast('ยังไม่มีลายมือ'); break; }
+      if (!(await app.confirm(`ล้างลายมือทั้งหมด ${app.graph.strokes.length} เส้น?`, { ok: 'ล้าง' }))) break;
+      app.mutate(g => { g.strokes = []; }); break;
+    }
     case 'export-jpeg':
       try { saved(await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'jpg'), { format: 'jpeg' }), 'ส่งออก JPEG'); } catch (err) { app.toast(err.message, true); } break;
     case 'export-pdf': case 'export-pdf-a4': case 'export-pdf-a3':
@@ -1204,7 +1234,7 @@ window.addEventListener('keydown', (e) => {
   if (key === '+' || key === '=') { const r = $('#canvas').getBoundingClientRect(); app.renderer.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1.2); return; }
   if (key === '-') { const r = $('#canvas').getBoundingClientRect(); app.renderer.zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1 / 1.2); return; }
   const lower = key.toLowerCase();
-  const tools = { v: 'select', n: 'node', l: 'link', t: 'note' };
+  const tools = { v: 'select', n: 'node', l: 'link', t: 'note', b: 'pen', x: 'eraser' };
   if (lower === 'h') { if (e.shiftKey) app.run('show-all'); else if (app.selection.size) app.run('focus'); else app.setTool('pan'); return; }
   if (lower === 'g') { app.run('add-group'); return; }
   if (tools[lower]) { app.setTool(tools[lower]); return; }
@@ -1255,7 +1285,7 @@ function boot() {
   checkVersion();
   app.renderer = new Renderer(app, $('#canvas'));
   safe('ตัวเลือก', () => app.loadOpts());
-  safe('เมนู', initMenus); safe('ค้นหา', initSearch); safe('แผงขวา', () => initPanels(app));
+  safe('เมนู', initMenus); safe('ค้นหา', initSearch); safe('แผงขวา', () => initPanels(app)); safe('ปากกา', initPenOpts);
   safe('ออโต้จัดผัง', () => app.setAutoArrange(app.opts.autoArrange));
   safe('แผงขวา', () => app.setPanel(app.opts.panel));
   safe('ตัวเลือกมุมมอง', () => { $('#opt-link-labels').checked = app.opts.linkLabels; $('#opt-grid').checked = app.opts.grid; $('#opt-snap').checked = app.opts.snap; });

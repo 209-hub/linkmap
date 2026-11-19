@@ -69,3 +69,19 @@ test('undo/redo แบบ snapshot', () => {
   assert.equal(g.size.nodes, 1);
   assert.equal(h.canRedo(), false);
 });
+
+test('ลายมือ (strokes): เพิ่ม/ลบ และบันทึก-โหลดกลับได้ ย้อนกลับได้', () => {
+  let g = new Graph();
+  const h = new History();
+  h.push(g);
+  const s = g.addStroke({ color: '#dc2626', width: 4, points: [[0, 0], [10.26, 5.04], [20, 0]] });
+  assert.equal(g.strokes.length, 1);
+  assert.deepEqual(s.points[1], [10.3, 5]);
+  const g2 = Graph.fromJSON(JSON.parse(JSON.stringify(g.toJSON())));
+  assert.equal(g2.strokes.length, 1);
+  assert.equal(g2.strokes[0].color, '#dc2626');
+  assert.ok(g2.removeStroke(s.id));
+  assert.equal(g2.strokes.length, 0);
+  g = h.undo(g);
+  assert.equal(g.strokes.length, 0, 'undo กลับไปก่อนขีด');
+});
