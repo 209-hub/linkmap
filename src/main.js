@@ -10,6 +10,9 @@ import { exportImage, exportPDF, exportSVG, downloadText, safeFilename } from '.
 import { IMAGE_MAX_W } from './render.js';
 import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, openAiDialog, openDedupeDialog, openFolderDialog, showTab } from './ui.js';
 import { findDuplicates, mergeNodes, linkDuplicates } from './dedupe.js';
+import { listDocs, getDoc, saveDoc, newDocId } from './library.js';
+import { miniThumb } from './thumb.js';
+import { showWorkspace, hideWorkspace, isWorkspaceOpen } from './workspace.js';
 import { fsSupported, pickFolder, restoreFolder, forgetFolder, ensurePermission, writeTextFile, readTextFile, listMapFiles } from './localsave.js';
 import { toOutline, importOutline, importTree, extractJSON, AI_PROMPT, AI_PROMPTS, buildExpandPrompt } from './outline.js';
 import { APP_VERSION } from './version.js';
@@ -54,6 +57,7 @@ app.changed = ({ structural = true } = {}) => {
   for (const id of [...app.selection]) if (!app.graph.nodes.has(id) && !app.graph.links.has(id)) app.selection.delete(id);
   for (const id of [...app.hidden]) if (!app.graph.nodes.has(id)) app.hidden.delete(id);
   if (structural) { app.computeTree(); if (app.analysis?.recompute) app.analysis.recompute(); }
+  app.docUpdated = Date.now();
   app.renderer.render();
   refreshPanels(app);
   updateStatus();
@@ -857,9 +861,8 @@ app.run = async (cmd) => {
     }
   }
   switch (cmd) {
-    case 'new':
-      if (app.graph.nodes.size && !(await app.confirm('เริ่มผังใหม่? ผังปัจจุบันจะถูกแทนที่ (ถ้ายังไม่ได้บันทึกเป็นไฟล์ JSON ให้กดยกเลิกแล้ว Ctrl+S ก่อน)', { ok: 'เริ่มผังใหม่' }))) return;
-      loadGraph(new Graph()); app.toast('เริ่มผังใหม่'); break;
+    case 'new': await app.newDoc(); break;
+    case 'workspace': app.showWorkspace(); break;
     case 'open': $('#file-json').value = ''; $('#file-json').click(); break;
     case 'save': {
       const json = JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] }, null, 2);
@@ -873,9 +876,7 @@ app.run = async (cmd) => {
       try { saved(await exportImage(app.renderer, safeFilename(app.graph.meta.title, 'png'), { format: 'png' }), 'ส่งออก PNG'); } catch (err) { app.toast(err.message, true); } break;
     case 'export-svg':
       try { saved(await exportSVG(app.renderer, safeFilename(app.graph.meta.title, 'svg')), 'ส่งออก SVG'); } catch (err) { app.toast(err.message, true); } break;
-    case 'load-sample':
-      if (app.graph.nodes.size && !(await app.confirm('โหลดตัวอย่างแทนผังปัจจุบัน?', { ok: 'โหลดตัวอย่าง' }))) return;
-      loadSample(); break;
+    case 'load-sample': startNewDoc(); loadSample(); await app.saveDocNow(); hideWorkspace(); break;
     case 'undo': { const g = app.history.undo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
     case 'redo': { const g = app.history.redo(app.graph); if (g) { app.graph = g; app.changed(); } break; }
     case 'select-all': app.select([...app.graph.nodes.keys()].filter(id => !app.isHidden(id))); break;
@@ -1001,7 +1002,7 @@ app.importAiText = (text, { underSelected = false } = {}) => {
   const parentId = underSelected ? [...app.selection].find(id => app.graph.getNode(id)?.type === 'topic') : null;
   const obj = extractJSON(text);
   if (obj && obj.format === 'linkmap' && Array.isArray(obj.nodes)) {
-    try { loadGraph(Graph.fromJSON(obj), { view: obj.view, hidden: obj.hidden || [] }); app.toast('เปิดไฟล์ LinkMap แล้ว'); return true; }
+    try { const g = Graph.fromJSON(obj); startNewDoc(); loadGraph(g, { view: obj.view, hidden: obj.hidden || [] }); app.saveDocNow(); hideWorkspace(); app.toast('เปิดไฟล์ LinkMap เป็นผังใหม่ในเวิร์กสเปซแล้ว'); return true; }
     catch (err) { app.toast('ไฟล์ LinkMap ไม่ถูกต้อง: ' + err.message, true); return false; }
   }
   let ids = [];
@@ -1044,6 +1045,74 @@ function centerWorld() {
 }
 
 // ---------------------------------------------------------------- โหลด/บันทึก
+// ---------------------------------------------------------------- คลังผัง (เวิร์กสเปซ)
+app.docId = null; app.docReady = false; app.docUpdated = 0;
+const currentDocJSON = () => ({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden], docId: app.docId });
+/** บันทึกผังปัจจุบันลงคลัง (ถ่ายสำเนาข้อมูลทันที แล้วเขียนแบบ async) */
+app.saveDocNow = () => {
+  if (!app.docId || !app.docReady) return Promise.resolve();
+  const id = app.docId, json = currentDocJSON();
+  const meta = {
+    id, title: app.graph.meta.title || 'ผังใหม่', updated: app.docUpdated || Date.now(), created: Date.parse(app.graph.meta.created) || Date.now(),
+    nodes: app.graph.entityNodes().length, links: app.graph.links.size, strokes: app.graph.strokes.length,
+    thumb: miniThumb(json, { dark: !!getTheme().dark }),
+  };
+  try { localStorage.setItem('linkmap.current', id); } catch { /* ignore */ }
+  return saveDoc(id, json, meta).catch(err => console.warn('บันทึกลงคลังผังไม่สำเร็จ', err));
+};
+/** เริ่มเอกสารใหม่ในคลัง (เก็บของเดิมก่อน) — เรียกก่อน loadGraph ของผังใหม่ */
+function startNewDoc() { app.saveDocNow(); app.docId = newDocId(); app.docReady = true; try { localStorage.setItem('linkmap.current', app.docId); } catch { /* ignore */ } }
+app.newDoc = async (graph = null) => {
+  startNewDoc();
+  loadGraph(graph || new Graph());
+  await app.saveDocNow();
+  hideWorkspace();
+  app.toast('สร้างผังใหม่แล้ว — กด Enter หรือดับเบิลคลิกเพื่อเริ่มจด (ผังเดิมอยู่ในเวิร์กสเปซ)');
+};
+app.openDoc = async (id, { stay = false } = {}) => {
+  await app.saveDocNow();
+  let obj = null, metas = [];
+  try { [obj, metas] = await Promise.all([getDoc(id), listDocs()]); } catch (err) { app.toast('เปิดผังไม่สำเร็จ: ' + (err?.message || err), true); return false; }
+  if (!obj) { app.toast('ไม่พบผังนี้ในคลัง', true); return false; }
+  try {
+    const g = Graph.fromJSON(obj);
+    app.docId = id; app.docReady = true;
+    loadGraph(g, { view: obj.view, hidden: obj.hidden || [] });
+    app.docUpdated = metas.find(m => m.id === id)?.updated || Date.now();
+    try { localStorage.setItem('linkmap.current', id); } catch { /* ignore */ }
+    if (!stay) hideWorkspace();
+    return true;
+  } catch (err) { app.toast('ไฟล์ผังเสียหาย: ' + err.message, true); return false; }
+};
+app.afterCurrentDeleted = async () => {
+  app.docId = null;
+  let metas = []; try { metas = await listDocs(); } catch { /* ignore */ }
+  if (metas[0] && await app.openDoc(metas[0].id, { stay: true })) return;
+  app.docId = newDocId(); app.docReady = true; loadGraph(new Graph()); await app.saveDocNow();
+};
+app.setTitle = (title) => { app.graph.meta.title = String(title || '').trim() || 'ผังใหม่'; $('#doc-title').value = app.graph.meta.title; app.changed({ structural: false }); };
+app.showWorkspace = () => showWorkspace(app);
+/** เปิดแอป: ย้ายงานเดิม (แบบผังเดียว) เข้าคลัง แล้วเปิดผังล่าสุด */
+app.bootDocs = async () => {
+  let backup = null, cur = null;
+  try { backup = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); cur = localStorage.getItem('linkmap.current'); } catch { /* ignore */ }
+  let metas = [], libOk = true;
+  try { metas = await listDocs(); } catch { libOk = false; }
+  const openObj = (obj, id, updated) => { app.docId = id; app.docReady = true; loadGraph(Graph.fromJSON(obj), { view: obj.view, hidden: obj.hidden || [] }); if (updated) app.docUpdated = updated; };
+  try {
+    if (backup?.nodes?.length && !backup.docId) { openObj(backup, newDocId()); await app.saveDocNow(); return; } // ย้ายงานจากเวอร์ชันผังเดียว
+    const id = (cur && metas.some(m => m.id === cur)) ? cur : metas[0]?.id;
+    if (id) {
+      let obj = await getDoc(id);
+      const newer = backup && backup.docId === id && String(backup.meta?.saved || '') > String(obj?.meta?.saved || '');
+      if (newer) obj = backup;
+      if (obj) { openObj(obj, id, newer ? Date.now() : metas.find(m => m.id === id)?.updated); if (newer) await app.saveDocNow(); return; }
+    }
+    if (backup?.docId && Array.isArray(backup.nodes) && (backup.nodes.length || !libOk)) { openObj(backup, backup.docId); await app.saveDocNow(); return; }
+  } catch (err) { console.warn('เปิดผังล่าสุดไม่สำเร็จ', err); }
+  app.docId = newDocId(); app.docReady = true; loadSample(); await app.saveDocNow(); // ใช้ครั้งแรก
+};
+
 function loadGraph(g, { view = null, hidden = [] } = {}) {
   app.graph = g; app.history = new History(100); app.selection.clear(); app.hidden = new Set(hidden);
   app.analysis = null; app.visual = {};
@@ -1064,11 +1133,14 @@ function loadSample() {
   app.toast('โหลดตัวอย่างแล้ว — เลือกหัวข้อแล้วกด Enter/Tab เพื่อจดต่อ');
 }
 let autosaveTimer = null;
+let libTimer = null;
 function scheduleAutosave() {
+  if (!app.docReady) return;
+  clearTimeout(libTimer); libTimer = setTimeout(() => app.saveDocNow(), 900);
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentDocJSON()));
       if (!(app.fs?.dir && app.fs.granted)) $('#status-saved').textContent = 'บันทึกอัตโนมัติ ' + new Date().toLocaleTimeString('th-TH');
     } catch (err) { if (!(app.fs?.dir && app.fs.granted)) $('#status-saved').textContent = 'บันทึกในเบราว์เซอร์ไม่สำเร็จ (ข้อมูลใหญ่เกิน?) — เลือกโฟลเดอร์บันทึกในเมนูไฟล์'; }
   }, 600);
@@ -1088,11 +1160,12 @@ $('#file-json').addEventListener('change', async (e) => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const obj = JSON.parse(await f.text());
-    loadGraph(Graph.fromJSON(obj), { view: obj.view, hidden: obj.hidden || [] });
+    const g = Graph.fromJSON(obj);
+    startNewDoc(); loadGraph(g, { view: obj.view, hidden: obj.hidden || [] }); app.saveDocNow(); hideWorkspace();
     app.toast(`เปิด ${f.name} แล้ว (${app.graph.size.nodes} โหนด, ${app.graph.size.links} เส้น)`);
   } catch (err) { app.toast('เปิดไฟล์ไม่สำเร็จ: ' + err.message, true); }
 });
-$('#doc-title').addEventListener('change', (e) => { app.graph.meta.title = e.target.value.trim() || 'ผังใหม่'; app.changed({ structural: false }); });
+$('#doc-title').addEventListener('change', (e) => app.setTitle(e.target.value));
 
 // ---------------------------------------------------------------- สถานะ
 function updateStatus() {
@@ -1195,6 +1268,7 @@ function isTyping(e) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
 }
 window.addEventListener('keydown', (e) => {
+  if (isWorkspaceOpen()) { if (e.key === 'Escape' && !document.querySelector('dialog[open]') && e.target.tagName !== 'INPUT') hideWorkspace(); return; }
   if (e.key === 'Escape') {
     if (isTyping(e)) return;
     app.renderer.cancelDrag(); app.hideContextMenu();
@@ -1290,10 +1364,14 @@ function boot() {
   safe('แผงขวา', () => app.setPanel(app.opts.panel));
   safe('ตัวเลือกมุมมอง', () => { $('#opt-link-labels').checked = app.opts.linkLabels; $('#opt-grid').checked = app.opts.grid; $('#opt-snap').checked = app.opts.snap; });
   app.setTool('select');
-  if (!restoreAutosave()) loadSample();
+  app.bootDocs();
   app.renderer.applyView();
+  const brand = $('#brand');
+  if (brand) { brand.addEventListener('click', () => app.showWorkspace()); brand.addEventListener('keydown', (e) => { if (e.key === 'Enter') app.showWorkspace(); }); }
   safe('โฟลเดอร์บันทึก', () => { app.fsInit(); });
-  window.addEventListener('beforeunload', () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] })); } catch { /* ignore */ } });
+  window.addEventListener('pagehide', () => { app.saveDocNow(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) app.saveDocNow(); });
+  window.addEventListener('beforeunload', () => { if (!app.docReady) return; try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentDocJSON())); } catch { /* ignore */ } });
 }
 boot();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
