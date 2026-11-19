@@ -8,7 +8,9 @@ import { sampleGraph } from './sample.js';
 import { exportNodesCSV, exportLinksCSV } from './csv.js';
 import { exportImage, exportPDF, exportSVG, downloadText, safeFilename } from './export.js';
 import { IMAGE_MAX_W } from './render.js';
-import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, openAiDialog, showTab } from './ui.js';
+import { initPanels, refreshPanels, openCsvDialog, openOutlineDialog, openAiDialog, openDedupeDialog, openFolderDialog, showTab } from './ui.js';
+import { findDuplicates, mergeNodes, linkDuplicates } from './dedupe.js';
+import { fsSupported, pickFolder, restoreFolder, forgetFolder, ensurePermission, writeTextFile, readTextFile, listMapFiles } from './localsave.js';
 import { toOutline, importOutline, importTree, extractJSON, AI_PROMPT, AI_PROMPTS, buildExpandPrompt } from './outline.js';
 import { APP_VERSION } from './version.js';
 
@@ -381,12 +383,137 @@ document.addEventListener('paste', (e) => {
   const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
   const items = [...(e.clipboardData?.items || [])];
   const imgItem = items.find(i => i.type.startsWith('image/'));
-  if (imgItem) { e.preventDefault(); app.setImageFromFile(imgItem.getAsFile()); return; }
+  if (imgItem) { e.preventDefault(); app.placeImage(imgItem.getAsFile()); return; }
   const text = e.clipboardData?.getData('text/plain');
   if (!text) return;
   if (/^\s*(```|\{|\[)/.test(text) && extractJSON(text)) { e.preventDefault(); app.importAiText(text, { underSelected: true }); return; }
   if (text.includes('\n') && /^\s*([-*#]|\d+[.)])\s/m.test(text)) { e.preventDefault(); app.importOutlineText(text, { underSelected: true }); }
 });
+/** วางรูป: มีหัวข้อเลือกอยู่ → ใส่ในหัวข้อนั้น, ไม่มี → สร้างหัวข้อรูปใหม่ที่ตำแหน่ง pt (หรือกลางจอ) */
+app.placeImage = async (file, pt = null, targetId = null) => {
+  if (!file) return;
+  let id = targetId || [...app.selection].find(i => app.graph.getNode(i)?.type === 'topic');
+  if (!id) {
+    const c = pt || centerWorld();
+    if (!pt) { // หาที่ว่างใกล้กลางจอ ไม่ให้ทับหัวข้ออื่น
+      const hit = () => [...app.graph.nodes.values()].some(n => n.type !== 'group' && Math.abs(n.x - c.x) < 150 && Math.abs(n.y - c.y) < 110);
+      for (let i = 0; i < 30 && hit(); i++) c.y += 120;
+    }
+    let node;
+    app.mutate(g => { node = g.addNode({ label: (file.name || 'รูปภาพ').replace(/\.[a-z0-9]+$/i, '') || 'รูปภาพ', type: 'topic', x: Math.round(c.x), y: Math.round(c.y) }); });
+    id = node.id; app.select([id]);
+  }
+  await app.setImageFromFile(file, id);
+};
+// ลากไฟล์มาวางบนผืนผ้าใบ: รูป → ใส่ในหัวข้อใต้เมาส์หรือสร้างหัวข้อใหม่, .json/.md/.txt → นำเข้าเป็นมายแมป
+(() => {
+  const wrap = $('#canvas-wrap'); if (!wrap) return;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  wrap.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); wrap.classList.add('drop-target'); } });
+  wrap.addEventListener('dragleave', () => wrap.classList.remove('drop-target'));
+  wrap.addEventListener('drop', async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); wrap.classList.remove('drop-target');
+    const pt = app.renderer.screenToWorld(e.clientX, e.clientY);
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.node');
+    const overId = el && app.graph.getNode(el.dataset.id)?.type === 'topic' ? el.dataset.id : null;
+    let k = 0;
+    for (const f of [...e.dataTransfer.files]) {
+      if (f.type.startsWith('image/')) { app.select([]); await app.placeImage(f, { x: pt.x + k * 40, y: pt.y + k * 40 }, k === 0 ? overId : null); k++; }
+      else if (/\.(json|md|txt)$/i.test(f.name)) app.importAiText(await f.text(), { underSelected: false });
+      else app.toast(`ไม่รองรับไฟล์ ${f.name}`, true);
+    }
+  });
+})();
+
+// ---------------------------------------------------------------- ตรวจคำซ้ำ
+app.findDuplicates = () => findDuplicates(app.graph);
+app.dedupeLink = (groups) => {
+  let added = 0;
+  app.mutate(g => { for (const grp of groups) added += linkDuplicates(g, grp.ids); });
+  app.toast(added ? `เชื่อมเส้นระหว่างหัวข้อชื่อซ้ำ ${added} เส้น` : 'หัวข้อเหล่านี้เชื่อมกันอยู่แล้ว');
+};
+app.dedupeMerge = (groups) => {
+  let merged = 0;
+  app.mutate(g => {
+    for (const grp of groups) {
+      const ids = grp.ids.filter(id => g.getNode(id));
+      if (ids.length < 2) continue;
+      // เก็บตัวที่อยู่ใกล้รากที่สุด (level น้อยสุด) เป็นตัวหลัก
+      ids.sort((a, b) => (g.getNode(a).level ?? 99) - (g.getNode(b).level ?? 99));
+      merged += mergeNodes(g, ids[0], ids.slice(1));
+    }
+  });
+  if (app.opts.autoArrange) app.arrangeMindmap({ keepView: true });
+  app.toast(`เมิร์จแล้ว ${merged} หัวข้อ (Ctrl+Z ย้อนกลับได้)`);
+};
+
+// ---------------------------------------------------------------- บันทึกอัตโนมัติลงโฟลเดอร์ในเครื่อง
+app.fs = { dir: null, granted: false, timer: null, lastFile: '' };
+const fsBanner = (html) => { const b = $('#fs-banner'); if (!b) return null; if (!html) { b.classList.add('hidden'); b.innerHTML = ''; return b; } b.innerHTML = html; b.classList.remove('hidden'); return b; };
+const fsFileName = () => safeFilename(app.graph.meta.title, 'linkmap.json');
+app.fsStatus = (text) => { const s = $('#status-saved'); if (s && text) { s.textContent = text; s.title = app.fs.dir ? `บันทึกอัตโนมัติลงโฟลเดอร์ “${app.fs.dir.name}” และในเบราว์เซอร์` : 'บันทึกอัตโนมัติในเบราว์เซอร์นี้'; } };
+app.fsWriteNow = async () => {
+  if (!app.fs.dir || !app.fs.granted) return;
+  try {
+    const name = fsFileName();
+    await writeTextFile(app.fs.dir, name, JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] }, null, 1));
+    app.fs.lastFile = name;
+    app.fsStatus(`💾 ${app.fs.dir.name}/${name} · ${new Date().toLocaleTimeString('th-TH')}`);
+  } catch (err) {
+    app.fs.granted = false;
+    app.fsStatus('💾 บันทึกลงโฟลเดอร์ไม่สำเร็จ');
+    app.fsAskPermission();
+  }
+};
+app.fsSchedule = () => { if (!app.fs.dir || !app.fs.granted) return; clearTimeout(app.fs.timer); app.fs.timer = setTimeout(app.fsWriteNow, 1500); };
+app.fsPick = async () => {
+  if (!fsSupported) { app.toast('เบราว์เซอร์นี้ยังไม่รองรับการเขียนโฟลเดอร์ในเครื่อง (ใช้ Chrome หรือ Edge บนคอม) — ใช้ Ctrl+S บันทึกไฟล์แทนได้', true); return; }
+  try {
+    app.fs.dir = await pickFolder();
+    app.fs.granted = await ensurePermission(app.fs.dir, true);
+    fsBanner('');
+    if (app.fs.granted) { await app.fsWriteNow(); app.toast(`จะบันทึกอัตโนมัติลงโฟลเดอร์ “${app.fs.dir.name}” ทุกครั้งที่แก้ไข`); }
+  } catch (err) { if (err?.name !== 'AbortError') app.toast('เลือกโฟลเดอร์ไม่สำเร็จ: ' + (err?.message || err), true); }
+};
+app.fsAskPermission = () => {
+  if (!app.fs.dir) return;
+  const b = fsBanner(`<span>💾 อนุญาตให้บันทึกอัตโนมัติลงโฟลเดอร์ “${app.fs.dir.name}”</span><button class="btn primary" data-a="grant">อนุญาต</button><button class="x" data-a="x" title="ไว้ทีหลัง">✕</button>`);
+  if (!b) return;
+  b.querySelector('[data-a="grant"]').onclick = async () => { app.fs.granted = await ensurePermission(app.fs.dir, true); if (app.fs.granted) { fsBanner(''); await app.fsWriteNow(); app.toast('เปิดบันทึกอัตโนมัติลงโฟลเดอร์แล้ว'); } else app.toast('ยังไม่ได้รับสิทธิ์เขียนโฟลเดอร์', true); };
+  b.querySelector('[data-a="x"]').onclick = () => fsBanner('');
+};
+app.fsInit = async () => {
+  if (!fsSupported) return;
+  app.fs.dir = await restoreFolder();
+  if (app.fs.dir) {
+    app.fs.granted = await ensurePermission(app.fs.dir, false);
+    if (app.fs.granted) app.fsStatus(`💾 โฟลเดอร์ ${app.fs.dir.name}`); else app.fsAskPermission();
+    return;
+  }
+  let dismissed = false; try { dismissed = localStorage.getItem('linkmap.fs.dismissed') === '1'; } catch { /* ignore */ }
+  if (dismissed) return;
+  const b = fsBanner('<span>💾 ให้บันทึกงานอัตโนมัติเป็นไฟล์ในเครื่องไหม?</span><button class="btn primary" data-a="pick">เลือกโฟลเดอร์</button><button class="x" data-a="x" title="ไม่ต้องถามอีก">✕</button>');
+  if (!b) return;
+  b.querySelector('[data-a="pick"]').onclick = () => app.fsPick();
+  b.querySelector('[data-a="x"]').onclick = () => { fsBanner(''); try { localStorage.setItem('linkmap.fs.dismissed', '1'); } catch { /* ignore */ } };
+};
+app.fsOpenList = async () => {
+  if (!fsSupported) { app.toast('เบราว์เซอร์นี้ไม่รองรับ ใช้ "เปิดไฟล์ JSON" แทน', true); return; }
+  if (!app.fs.dir) { await app.fsPick(); if (!app.fs.dir) return; }
+  if (!app.fs.granted) { app.fs.granted = await ensurePermission(app.fs.dir, true); if (!app.fs.granted) { app.toast('ยังไม่ได้รับสิทธิ์อ่านโฟลเดอร์', true); return; } }
+  try { openFolderDialog(app, await listMapFiles(app.fs.dir), app.fs.dir.name); } catch (err) { app.toast('อ่านโฟลเดอร์ไม่สำเร็จ: ' + err.message, true); }
+};
+app.fsOpenFile = async (name) => {
+  try {
+    await app.fsWriteNow(); // เก็บงานปัจจุบันก่อนสลับ
+    const text = await readTextFile(app.fs.dir, name);
+    if (!app.importAiText(text, { underSelected: false })) return;
+    app.toast(`เปิด ${name} จากโฟลเดอร์แล้ว`);
+  } catch (err) { app.toast('เปิดไฟล์ไม่สำเร็จ: ' + err.message, true); }
+};
+app.fsForget = async () => { await forgetFolder(); app.fs.dir = null; app.fs.granted = false; fsBanner(''); app.fsStatus('บันทึกอัตโนมัติในเบราว์เซอร์'); app.toast('เลิกบันทึกลงโฟลเดอร์แล้ว (ไฟล์เดิมยังอยู่ในเครื่อง)'); };
+
 $('#file-image')?.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) app.setImageFromFile(f); e.target.value = ''; });
 
 app.setMark = (mark) => {
@@ -672,6 +799,10 @@ app.run = async (cmd) => {
   const selNodes = () => [...app.selection].filter(id => app.graph.nodes.has(id));
   if (cmd.startsWith('layout:')) return app.applyLayout(cmd.slice(7));
   if (cmd.startsWith('theme:')) return app.applyTheme(cmd.slice(6));
+  if (cmd === 'dedupe') return openDedupeDialog(app);
+  if (cmd === 'fs-pick') return app.fsPick();
+  if (cmd === 'fs-open') return app.fsOpenList();
+  if (cmd === 'fs-forget') return app.fsForget();
   if (cmd === 'ai:dialog') return openAiDialog(app);
   if (cmd === 'ai:expand') return app.aiExpandSelected();
   if (cmd === 'ai:paste') return openAiDialog(app);
@@ -897,9 +1028,10 @@ function scheduleAutosave() {
   autosaveTimer = setTimeout(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] }));
-      $('#status-saved').textContent = 'บันทึกอัตโนมัติ ' + new Date().toLocaleTimeString('th-TH');
-    } catch (err) { $('#status-saved').textContent = 'บันทึกอัตโนมัติไม่สำเร็จ'; }
+      if (!(app.fs?.dir && app.fs.granted)) $('#status-saved').textContent = 'บันทึกอัตโนมัติ ' + new Date().toLocaleTimeString('th-TH');
+    } catch (err) { if (!(app.fs?.dir && app.fs.granted)) $('#status-saved').textContent = 'บันทึกในเบราว์เซอร์ไม่สำเร็จ (ข้อมูลใหญ่เกิน?) — เลือกโฟลเดอร์บันทึกในเมนูไฟล์'; }
   }, 600);
+  app.fsSchedule?.();
 }
 function restoreAutosave() {
   try {
@@ -1119,6 +1251,7 @@ function boot() {
   app.setTool('select');
   if (!restoreAutosave()) loadSample();
   app.renderer.applyView();
+  safe('โฟลเดอร์บันทึก', () => { app.fsInit(); });
   window.addEventListener('beforeunload', () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...app.graph.toJSON(), view: app.view, hidden: [...app.hidden] })); } catch { /* ignore */ } });
 }
 boot();

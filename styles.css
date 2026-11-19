@@ -255,6 +255,15 @@ dialog::backdrop { background: rgba(15, 23, 42, .35); }
 .csv-preview th { background: #f8fafc; }
 .csv-preview .kind { margin-bottom: 6px; }
 
+.fs-banner { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 12; background: var(--panel); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow); padding: 6px 8px 6px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; max-width: calc(100% - 20px); }
+.fs-banner .btn { border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
+.fs-banner .x { border: 0; background: none; color: var(--muted); font-size: 15px; padding: 0 4px; }
+.dedupe-list { max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.dedupe-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.dedupe-item:last-child { border-bottom: 0; }
+.dedupe-item .name { font-weight: 600; flex: 1; min-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.dedupe-item .cnt { color: var(--muted); font-size: 12px; }
+#canvas-wrap.drop-target::after { content: 'ปล่อยไฟล์ที่นี่'; position: absolute; inset: 8px; border: 3px dashed var(--accent); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); background: rgba(37,99,235,.06); pointer-events: none; z-index: 11; }
 .toast { position: fixed; bottom: 42px; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 999px; box-shadow: var(--shadow); z-index: 100; font-size: 13px; max-width: 80vw; }
 .toast.error { background: var(--danger); }
 

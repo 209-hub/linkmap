@@ -6,7 +6,7 @@
 <title>LinkMap — มายแมปจดเรียน จัดผังอัตโนมัติ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='8' r='5' fill='%232563eb'/%3E%3Ccircle cx='24' cy='12' r='5' fill='%237c3aed'/%3E%3Ccircle cx='14' cy='25' r='5' fill='%23059669'/%3E%3Cpath d='M8 8L24 12L14 25Z' fill='none' stroke='%2394a3b8' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="styles.css">
-<meta name="app-version" content="2026-10-13.1018">
+<meta name="app-version" content="2026-11-20.0220">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
 <meta name="mobile-web-app-capable" content="yes">
@@ -45,6 +45,10 @@
           <button data-cmd="export-pdf-a4">ส่งออก PDF A4 แนวนอน</button>
           <button data-cmd="export-pdf-a3">ส่งออก PDF A3 แนวนอน</button>
           <hr>
+          <button data-cmd="fs-pick">💾 เลือกโฟลเดอร์บันทึกอัตโนมัติในเครื่อง…</button>
+          <button data-cmd="fs-open">เปิดผังจากโฟลเดอร์ที่เลือกไว้…</button>
+          <button data-cmd="fs-forget">เลิกบันทึกลงโฟลเดอร์</button>
+          <hr>
           <button data-cmd="load-sample">โหลดเครือข่ายตัวอย่าง</button>
         </div>
       </div>
@@ -55,6 +59,7 @@
           <hr>
           <button data-cmd="select-all">เลือกทั้งหมด <kbd>Ctrl+A</kbd></button>
           <button data-cmd="select-branch">เลือกทั้งกิ่งของหัวข้อที่เลือก <kbd>Ctrl+Shift+A</kbd></button>
+          <button data-cmd="dedupe">🔁 ตรวจคำซ้ำ (เชื่อม/เมิร์จหัวข้อชื่อเดียวกัน)…</button>
           <button data-cmd="duplicate">ทำสำเนาที่เลือก <kbd>Ctrl+D</kbd></button>
           <button data-cmd="delete">ลบที่เลือก <kbd>Delete</kbd></button>
           <hr>
@@ -175,6 +180,7 @@
       <div class="tool-sep"></div>
       <div id="type-palette" class="type-palette" title="ประเภทของโหนดใหม่"></div>
       <div class="tool-sep"></div>
+      <button class="tool tool-action" data-cmd="dedupe" title="ตรวจหัวข้อที่ชื่อซ้ำกัน แล้วเชื่อมเส้นหรือเมิร์จ"><span>🔁</span><small>คำซ้ำ</small></button>
       <button class="tool" id="tb-panel" title="แสดง/ซ่อนแผงคุณสมบัติด้านขวา (\)"><span>▥</span><small>แผงขวา</small></button>
     </aside>
 
@@ -203,6 +209,7 @@
       </svg>
       <input id="inline-editor" class="inline-editor hidden" spellcheck="false">
       <div id="context-menu" class="context-menu hidden"></div>
+      <div id="fs-banner" class="fs-banner hidden"></div>
       <div id="empty-hint" class="empty-hint hidden"><b>เริ่มจดได้เลย:</b> กด <kbd>Enter</kbd> หรือดับเบิลคลิกเพื่อสร้างหัวข้อหลัก · พิมพ์แล้วกด <kbd>Tab</kbd> = หัวข้อย่อย · <kbd>Enter</kbd> = หัวข้อถัดไป<br>แอปจะจัดผังมายแมปให้เองทุกครั้ง · แตะปุ่ม <b>+</b> ข้างหัวข้อเพื่อเพิ่มหัวข้อย่อย · บนแท็บเล็ตบีบสองนิ้วเพื่อซูม</div>
     </main>
 
@@ -297,6 +304,31 @@
   </div>
 </dialog>
 
+<!-- ตรวจคำซ้ำ -->
+<dialog id="dlg-dedupe">
+  <div class="dialog-body">
+    <h2>🔁 หัวข้อที่ชื่อซ้ำกัน</h2>
+    <p class="muted" id="dedupe-summary"></p>
+    <div id="dedupe-list" class="dedupe-list"></div>
+    <div class="row">
+      <button type="button" class="btn" id="dedupe-link-all">เชื่อมเส้นทุกกลุ่ม</button>
+      <button type="button" class="btn" id="dedupe-merge-all">เมิร์จทุกกลุ่ม</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn primary" id="dedupe-close">ปิด</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- เปิดผังจากโฟลเดอร์ -->
+<dialog id="dlg-folder">
+  <div class="dialog-body">
+    <h2>เปิดผังจากโฟลเดอร์</h2>
+    <p class="muted" id="folder-summary"></p>
+    <div id="folder-list" class="dedupe-list"></div>
+    <div class="row"><span class="spacer"></span><button type="button" class="btn primary" id="folder-close">ปิด</button></div>
+  </div>
+</dialog>
+
 <!-- กล่องยืนยัน -->
 <dialog id="dlg-confirm">
   <div class="dialog-body">
@@ -342,6 +374,7 @@
           <li class="muted" style="font-size:11px">เวอร์ชันแอป: <span id="help-version"></span> · ถ้าเมนูไม่ทำงานหลังอัปเดต ให้กด Ctrl+F5 (รีเฟรชแบบล้างแคช)</li>
           <li><b>โหมดจดเรียน:</b> <kbd>Enter</kbd> หัวข้อถัดไป (พี่น้อง) · <kbd>Tab</kbd> หัวข้อย่อย · พิมพ์ตัวอักษรบนหัวข้อที่เลือกเพื่อแก้ทันที · <kbd>Ctrl+L</kbd> จัดผังมายแมป</li>
           <li><b>✨ เอไอ:</b> <kbd>Ctrl+J</kbd> สรุปเอกสารเป็นมายแมป — แอปคัดลอกคำสั่งให้ คุณวางใน Gemini/ChatGPT/Claude พร้อมแนบ PDF แล้วนำคำตอบ (JSON หรือโครงร่าง) มาวางกลับ ไม่ต้องใช้ API</li>
+          <li><b>💾 บันทึกลงเครื่อง:</b> เมนู ไฟล์ › เลือกโฟลเดอร์บันทึกอัตโนมัติ (Chrome/Edge บนคอม) — ทุกการแก้ไขจะถูกเขียนเป็นไฟล์ .linkmap.json ในโฟลเดอร์นั้น · <b>🔁 ตรวจคำซ้ำ:</b> ปุ่มที่แถบซ้าย เชื่อมเส้นหรือเมิร์จหัวข้อชื่อเดียวกัน · ลากไฟล์รูปมาวางบนผืนผ้าใบได้</li>
           <li><b>ตกแต่ง:</b> <kbd>Ctrl+B</kbd> ตัวหนา · <kbd>Ctrl+I</kbd> ตัวเอียง · <kbd>Ctrl+V</kbd> วางรูปลงหัวข้อ (หรือวางข้อความแบบรายการเพื่อสร้างกิ่ง) · ธีมสี/ธีมมืดที่เมนูมุมมอง · <kbd>Ctrl+P</kbd> ส่งออก PDF</li>
           <li><b>มายแมป:</b> <kbd>←↑↓→</kbd> เดินไปหัวข้อข้างเคียง · <kbd>/</kbd> ยุบ/ขยายกิ่ง · <kbd>Ctrl+↑/↓</kbd> สลับลำดับ · <kbd>Delete</kbd> ลบทั้งกิ่ง · <kbd>Shift+Del</kbd> ลบเฉพาะหัวข้อ · <kbd>Home</kbd> ไปหัวข้อหลัก · ลากหัวข้อไปวางบนหัวข้ออื่น = ย้ายกิ่ง · <kbd>Ctrl+M</kbd> นำเข้าโครงร่างข้อความ</li>
           <li><kbd>Space</kbd> แตะ = สลับ เลือก ⇄ เลื่อน · กดค้างแล้วลาก = เลื่อนชั่วคราว</li>
@@ -359,6 +392,6 @@
 </dialog>
 
 <div id="toast" class="toast hidden"></div>
-<script type="module" src="src/main.js?v=2026-10-13.1018"></script>
+<script type="module" src="src/main.js?v=2026-11-20.0220"></script>
 </body>
 </html>

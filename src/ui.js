@@ -372,6 +372,45 @@ export function openAiDialog(app, { prefill = '' } = {}) {
   dlg.showModal();
 }
 
+// ---------------------------------------------------------------- ตรวจคำซ้ำ
+export function openDedupeDialog(app) {
+  const dlg = document.getElementById('dlg-dedupe');
+  const list = dlg.querySelector('#dedupe-list');
+  const render = () => {
+    const groups = app.findDuplicates();
+    dlg.querySelector('#dedupe-summary').textContent = groups.length
+      ? `พบ ${groups.length} ชื่อที่ซ้ำกัน (${groups.reduce((s, g) => s + g.ids.length, 0)} หัวข้อ) — "เชื่อมเส้น" = โยงหัวข้อชื่อเดียวกันถึงกัน · "เมิร์จ" = รวมเป็นหัวข้อเดียว (ลูกและเส้นทั้งหมดย้ายมารวม ย้อนกลับได้ด้วย Ctrl+Z)`
+      : 'ไม่พบหัวข้อที่ชื่อซ้ำกัน';
+    list.innerHTML = groups.map((g, i) => `<div class="dedupe-item" data-i="${i}"><span class="name" title="${esc(g.label)}">${esc(g.label)}</span><span class="cnt">× ${g.ids.length}</span>
+      <button class="btn small" data-act="show">ดูบนผัง</button><button class="btn small" data-act="link">เชื่อมเส้น</button><button class="btn small primary" data-act="merge">เมิร์จ</button></div>`).join('');
+    list.style.display = groups.length ? '' : 'none';
+    dlg.querySelector('#dedupe-link-all').disabled = dlg.querySelector('#dedupe-merge-all').disabled = !groups.length;
+    list.querySelectorAll('.dedupe-item').forEach(row => {
+      const g = groups[Number(row.dataset.i)];
+      row.querySelector('[data-act="show"]').onclick = () => { dlg.close(); app.select(g.ids); app.renderer.fit(new Set(g.ids), 160); };
+      row.querySelector('[data-act="link"]').onclick = () => { app.dedupeLink([g]); render(); };
+      row.querySelector('[data-act="merge"]').onclick = () => { app.dedupeMerge([g]); render(); };
+    });
+    dlg.querySelector('#dedupe-link-all').onclick = () => { app.dedupeLink(groups); render(); };
+    dlg.querySelector('#dedupe-merge-all').onclick = async () => { if (await app.confirm(`เมิร์จทั้ง ${groups.length} กลุ่ม?`, { ok: 'เมิร์จทั้งหมด' })) { app.dedupeMerge(groups); render(); } };
+  };
+  dlg.querySelector('#dedupe-close').onclick = () => dlg.close();
+  render();
+  dlg.showModal();
+}
+
+// ---------------------------------------------------------------- เปิดผังจากโฟลเดอร์
+export function openFolderDialog(app, files, folderName) {
+  const dlg = document.getElementById('dlg-folder');
+  dlg.querySelector('#folder-summary').textContent = files.length ? `โฟลเดอร์ “${folderName}” มี ${files.length} ไฟล์` : `โฟลเดอร์ “${folderName}” ยังไม่มีไฟล์ผัง (.json)`;
+  const list = dlg.querySelector('#folder-list');
+  list.style.display = files.length ? '' : 'none';
+  list.innerHTML = files.map((f, i) => `<div class="dedupe-item" data-i="${i}"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="cnt">${new Date(f.modified).toLocaleString('th-TH')} · ${Math.max(1, Math.round(f.size / 1024))} KB</span><button class="btn small primary" data-act="open">เปิด</button></div>`).join('');
+  list.querySelectorAll('.dedupe-item').forEach(row => { row.querySelector('[data-act="open"]').onclick = () => { dlg.close(); app.fsOpenFile(files[Number(row.dataset.i)].name); }; });
+  dlg.querySelector('#folder-close').onclick = () => dlg.close();
+  dlg.showModal();
+}
+
 // ---------------------------------------------------------------- Outline dialog
 export function openOutlineDialog(app) {
   const dlg = document.getElementById('dlg-outline');
