@@ -627,7 +627,7 @@ editor.addEventListener('keydown', (e) => {
   // Tab: ตรวจหลายแบบ (key/code/keyCode) เพราะ Safari และแป้นบางภาษาบน macOS รายงานค่า key ต่างกันระหว่างประกอบตัวอักษร
   // ทางเลือกบน Mac: ⌘/Ctrl+Enter หรือ Shift+Enter = หัวข้อย่อยเหมือน Tab
   const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter';
-  const isTab = e.key === 'Tab' || e.code === 'Tab' || e.keyCode === 9 || (isEnter && (e.metaKey || e.ctrlKey || e.shiftKey));
+  const isTab = e.key === 'Tab' || e.code === 'Tab' || e.keyCode === 9 || (isEnter && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey));
   if (isTab) {
     e.preventDefault();
     if (!editor.value.trim()) return;
@@ -1319,7 +1319,7 @@ window.addEventListener('keydown', (e) => {
   if (lower === 'h') { if (e.shiftKey) app.run('show-all'); else if (app.selection.size) app.run('focus'); else app.setTool('pan'); return; }
   if (lower === 'g') { app.run('add-group'); return; }
   if (tools[lower]) { app.setTool(tools[lower]); return; }
-  if (key === 'Enter') { e.preventDefault(); app.addTopic(e.shiftKey ? 'child' : 'sibling'); return; }
+  if (key === 'Enter') { e.preventDefault(); app.addTopic(e.shiftKey || e.altKey ? 'child' : 'sibling'); return; }
   if (key === 'Tab' || e.code === 'Tab' || e.keyCode === 9 || key === 'Insert') { e.preventDefault(); app.addTopic('child'); return; }
   const layouts = { 1: 'mindmap', 2: 'orgchart', 3: 'force', 4: 'circular', 5: 'grouped', 6: 'timeline' };
   if (layouts[key]) { app.run('layout:' + layouts[key]); return; }
