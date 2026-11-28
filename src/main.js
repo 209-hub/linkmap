@@ -624,14 +624,19 @@ app.closeInlineEditor = (commit, { reason = 'commit' } = {}) => {
 editor.addEventListener('keydown', (e) => {
   e.stopPropagation();
   const id = editor.dataset.id; const n = app.graph.getNode(id);
-  if (e.key === 'Tab') {
+  // Tab: ตรวจหลายแบบ (key/code/keyCode) เพราะ Safari และแป้นบางภาษาบน macOS รายงานค่า key ต่างกันระหว่างประกอบตัวอักษร
+  // ทางเลือกบน Mac: ⌘/Ctrl+Enter หรือ Shift+Enter = หัวข้อย่อยเหมือน Tab
+  const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter';
+  const isTab = e.key === 'Tab' || e.code === 'Tab' || e.keyCode === 9 || (isEnter && (e.metaKey || e.ctrlKey || e.shiftKey));
+  if (isTab) {
     e.preventDefault();
     if (!editor.value.trim()) return;
     app.closeInlineEditor(true);
     if (n && app.graph.nodes.has(id)) { app.select([id]); app.addTopic('child'); } else $('#canvas').focus();
     return;
   }
-  if (e.key === 'Enter') {
+  if (isEnter) {
+    if (e.isComposing || e.keyCode === 229) return; // กำลังเลือกคำจากตัวช่วยพิมพ์ (IME) — ให้ Enter ยืนยันคำก่อน
     e.preventDefault();
     const wasNew = editor.dataset.isNew === '1';
     const empty = !editor.value.trim();
@@ -1284,6 +1289,7 @@ window.addEventListener('keydown', (e) => {
     if (!e.repeat) { app._spaceAt = performance.now(); app._spaceDragged = false; }
     app.spaceDown = true; $('#canvas').classList.add('tool-pan'); e.preventDefault(); return;
   }
+  if (ctrl && (e.key === 'Enter' || e.code === 'Enter')) { e.preventDefault(); app.addTopic('child'); return; } // ⌘/Ctrl+Enter = หัวข้อย่อย (ทางเลือกของ Tab บน Mac)
   if (ctrl) {
     const k = e.key.toLowerCase();
     const map = { z: e.shiftKey ? 'redo' : 'undo', y: 'redo', a: e.shiftKey ? 'select-branch' : 'select-all', d: 'duplicate', s: 'save', o: 'open', l: 'layout:mindmap', e: 'export-png', b: 'bold', i: 'italic', p: 'export-pdf' };
@@ -1314,7 +1320,7 @@ window.addEventListener('keydown', (e) => {
   if (lower === 'g') { app.run('add-group'); return; }
   if (tools[lower]) { app.setTool(tools[lower]); return; }
   if (key === 'Enter') { e.preventDefault(); app.addTopic(e.shiftKey ? 'child' : 'sibling'); return; }
-  if (key === 'Tab' || key === 'Insert') { e.preventDefault(); app.addTopic('child'); return; }
+  if (key === 'Tab' || e.code === 'Tab' || e.keyCode === 9 || key === 'Insert') { e.preventDefault(); app.addTopic('child'); return; }
   const layouts = { 1: 'mindmap', 2: 'orgchart', 3: 'force', 4: 'circular', 5: 'grouped', 6: 'timeline' };
   if (layouts[key]) { app.run('layout:' + layouts[key]); return; }
   if (key === '0') { app.run('zoom-100'); return; }
